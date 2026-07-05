@@ -11,7 +11,9 @@ Run with:  streamlit run app.py   (from inside the .venv)
 
 Text extraction reuses boi_pdf_text.extract_one, and results are cached per URL.
 """
+import gzip
 import os
+import re
 
 import pandas as pd
 import streamlit as st
@@ -21,6 +23,8 @@ from boi_pdf_text import extract_one, slug_for
 HERE = os.path.dirname(os.path.abspath(__file__))
 LINKS = os.path.join(HERE, "boi_pdf_links.csv")
 INDEX = os.path.join(HERE, "boi_publications_index.csv")
+MANIFEST = os.path.join(HERE, "boi_pdf_text_manifest.csv")
+TEXT_DIR = os.path.join(HERE, "boi_texts")
 
 st.set_page_config(page_title="BOI Publications Explorer",
                    page_icon="🏦", layout="wide")
@@ -40,6 +44,51 @@ def load_index(mtime):
     return pd.read_csv(INDEX)
 
 
+@st.cache_data(show_spinner=False)
+def load_text_manifest(mtime):
+    if not os.path.exists(MANIFEST):
+        return pd.DataFrame()
+    df = pd.read_csv(MANIFEST)
+    for c in ("doc_url", "doc_title", "source_title", "section", "lastmod",
+              "txt_path", "status"):
+        if c in df.columns:
+            df[c] = df[c].fillna("")
+    return df
+
+
+@st.cache_data(show_spinner=False)
+def load_search_docs(signature):
+    manifest = load_text_manifest(file_mtime(MANIFEST))
+    if manifest.empty:
+        return pd.DataFrame()
+
+    rows = []
+    ok = manifest[manifest["status"].astype(str).str.lower() == "ok"]
+    for _, row in ok.drop_duplicates(subset=["doc_url"]).iterrows():
+        txt_path = str(row.get("txt_path", ""))
+        full_path = os.path.join(HERE, txt_path)
+        if not txt_path or not os.path.exists(full_path):
+            continue
+        try:
+            with gzip.open(full_path, "rt", encoding="utf-8") as fh:
+                text = fh.read()
+        except OSError:
+            continue
+
+        rows.append({
+            "source_title": row.get("source_title", ""),
+            "doc_title": row.get("doc_title", ""),
+            "section": row.get("section", ""),
+            "lastmod": row.get("lastmod", ""),
+            "pages": row.get("pages", ""),
+            "chars": row.get("chars", len(text)),
+            "doc_url": row.get("doc_url", ""),
+            "txt_path": txt_path,
+            "_text": text,
+        })
+    return pd.DataFrame(rows)
+
+
 @st.cache_data(show_spinner="Extracting text…")
 def get_text(url):
     """Download + extract a single PDF. Cached per URL. Returns (pages, text)."""
@@ -48,6 +97,90 @@ def get_text(url):
 
 def file_mtime(path):
     return os.path.getmtime(path) if os.path.exists(path) else 0
+
+
+def search_corpus_signature():
+    if not os.path.isdir(TEXT_DIR):
+        return (file_mtime(MANIFEST),)
+    files = []
+    for name in sorted(os.listdir(TEXT_DIR)):
+        if not name.endswith(".txt.gz"):
+            continue
+        path = os.path.join(TEXT_DIR, name)
+        files.append((name, os.path.getmtime(path), os.path.getsize(path)))
+    return (file_mtime(MANIFEST), tuple(files))
+
+
+def parse_terms(query):
+    terms = []
+    for quoted, bare in re.findall(r'"([^"]+)"|(\S+)', query):
+        term = (quoted or bare).strip().lower()
+        if term and term not in terms:
+            terms.append(term)
+    return terms
+
+
+def find_snippets(text, terms, width=240, limit=3):
+    flat = re.sub(r"\s+", " ", text).strip()
+    lowered = flat.lower()
+    positions = []
+    for term in terms:
+        pos = lowered.find(term)
+        while pos != -1:
+            positions.append(pos)
+            pos = lowered.find(term, pos + max(1, len(term)))
+            if len(positions) >= limit * len(terms) * 3:
+                break
+    snippets = []
+    last_end = -1
+    for pos in sorted(positions):
+        start = max(0, pos - width // 2)
+        end = min(len(flat), pos + width // 2)
+        if start <= last_end:
+            continue
+        snippets.append(
+            ("…" if start else "") + flat[start:end] + ("…" if end < len(flat) else "")
+        )
+        last_end = end
+        if len(snippets) == limit:
+            break
+    return "\n\n".join(snippets)
+
+
+def search_full_text(docs, terms, match_mode, limit):
+    rows = []
+    require_all = match_mode == "All terms"
+    for _, row in docs.iterrows():
+        text = row["_text"]
+        lowered = text.lower()
+        counts = {term: lowered.count(term) for term in terms}
+        matched = {term: count for term, count in counts.items() if count}
+        if require_all and len(matched) != len(terms):
+            continue
+        if not require_all and not matched:
+            continue
+
+        rows.append({
+            "source_title": row["source_title"],
+            "doc_title": row["doc_title"],
+            "section": row["section"],
+            "lastmod": row["lastmod"],
+            "pages": row["pages"],
+            "matches": sum(matched.values()),
+            "matched_terms": ", ".join(matched),
+            "snippet": find_snippets(text, terms),
+            "doc_url": row["doc_url"],
+            "txt_path": row["txt_path"],
+            "_text": text,
+        })
+
+    results = pd.DataFrame(rows)
+    if results.empty:
+        return results
+    return results.sort_values(
+        ["matches", "lastmod", "source_title"],
+        ascending=[False, False, True],
+    ).head(limit)
 
 
 st.title("🏦 Bank of Israel Publications Explorer")
@@ -59,7 +192,8 @@ if not os.path.exists(LINKS):
     st.stop()
 
 catalog = load_catalog(file_mtime(LINKS))
-tab_catalog, tab_overview = st.tabs(["📚 Catalog", "📊 Overview"])
+tab_catalog, tab_search, tab_overview = st.tabs(
+    ["📚 Catalog", "🔎 Full Text", "📊 Overview"])
 
 # --------------------------------------------------------------------------- #
 # Catalog tab
@@ -101,7 +235,7 @@ with tab_catalog:
                     "doc_url"]].copy()
     display.insert(0, "select", False)
     edited = st.data_editor(
-        display, hide_index=True, use_container_width=True, height=380,
+        display, hide_index=True, width="stretch", height=380,
         column_config={
             "select": st.column_config.CheckboxColumn("✓", width="small"),
             "source_title": "Publication",
@@ -145,6 +279,86 @@ with tab_catalog:
         st.success(f"Extracted {len(chosen)} document(s).")
 
 # --------------------------------------------------------------------------- #
+# Full-text tab
+# --------------------------------------------------------------------------- #
+with tab_search:
+    docs = load_search_docs(search_corpus_signature())
+    s1, s2, s3 = st.columns(3)
+    s1.metric("Searchable documents", f"{len(docs):,}")
+    text_file_count = len(docs["txt_path"].unique()) if not docs.empty else 0
+    indexed_chars = int(docs["_text"].str.len().sum()) if not docs.empty else 0
+    s2.metric("Text files", f"{text_file_count:,}")
+    s3.metric("Indexed characters", f"{indexed_chars:,}")
+
+    qcol, mode_col, limit_col = st.columns([3, 1, 1])
+    with qcol:
+        full_query = st.text_input(
+            "Search full text",
+            "",
+            placeholder='inflation expectations or "monetary policy"',
+            key="full_text_query")
+    with mode_col:
+        match_mode = st.segmented_control(
+            "Match",
+            ["All terms", "Any term"],
+            default="All terms",
+            key="full_text_match")
+    with limit_col:
+        result_limit = st.number_input(
+            "Results",
+            min_value=5,
+            max_value=100,
+            value=25,
+            step=5,
+            key="full_text_limit")
+
+    terms = parse_terms(full_query)
+    if not docs.empty and terms:
+        results = search_full_text(docs, terms, match_mode, int(result_limit))
+        st.markdown(f"**{len(results):,}** documents match.")
+        if not results.empty:
+            table = results[["source_title", "doc_title", "section", "lastmod",
+                             "pages", "matches", "matched_terms", "doc_url"]]
+            st.dataframe(
+                table,
+                hide_index=True,
+                width="stretch",
+                column_config={
+                    "source_title": "Publication",
+                    "doc_title": "Link text",
+                    "section": "Section",
+                    "lastmod": st.column_config.TextColumn("Updated", width="medium"),
+                    "pages": st.column_config.NumberColumn("Pages", width="small"),
+                    "matches": st.column_config.NumberColumn("Hits", width="small"),
+                    "matched_terms": "Terms",
+                    "doc_url": st.column_config.LinkColumn("URL"),
+                })
+            st.download_button(
+                "⬇️ Download search results (CSV)",
+                results.drop(columns=["_text"]).to_csv(index=False).encode("utf-8"),
+                "boi_full_text_search_results.csv",
+                "text/csv")
+
+            for i, row in results.iterrows():
+                title = row["source_title"] or row["doc_title"] or row["doc_url"]
+                with st.expander(
+                        f"🔎 {title} — {row['matches']:,} hits",
+                        expanded=(i == results.index[0])):
+                    st.caption(row["doc_url"])
+                    st.text_area("Snippets", row["snippet"], height=160,
+                                 key=f"snippet_{i}")
+                    st.download_button(
+                        "⬇️ Download full text (.txt)",
+                        row["_text"].encode("utf-8"),
+                        slug_for(row["doc_url"]) + ".txt",
+                        "text/plain",
+                        key=f"full_text_download_{i}")
+        else:
+            st.info("No extracted document text matched that query.")
+    elif docs.empty:
+        st.warning("No extracted text files were found.")
+
+# --------------------------------------------------------------------------- #
 # Overview tab
 # --------------------------------------------------------------------------- #
 with tab_overview:
@@ -163,4 +377,4 @@ with tab_overview:
         idx = load_index(file_mtime(INDEX))
         st.subheader("Page index (sitemap-derived)")
         st.caption(f"{len(idx):,} publication pages known from the sitemap.")
-        st.dataframe(idx.head(200), hide_index=True, use_container_width=True)
+        st.dataframe(idx.head(200), hide_index=True, width="stretch")
