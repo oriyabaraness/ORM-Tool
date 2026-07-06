@@ -101,16 +101,16 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
 <style>
   :root {{
     color-scheme: light;
-    --bg: #f4f1eb;
+    --bg: #f6f4ef;
     --ink: #172026;
     --muted: #5d6870;
-    --line: #d9d2c6;
-    --paper: #fffdf8;
-    --panel: #fbfaf7;
-    --accent: #2b6f78;
-    --accent-strong: #174d56;
-    --hit: rgba(255, 211, 94, 0.42);
-    --hit-active: rgba(27, 111, 120, 0.36);
+    --line: #ded8cf;
+    --paper: #fffefa;
+    --panel: #f8f6f1;
+    --accent: #244e60;
+    --accent-strong: #163744;
+    --hit: rgba(241, 204, 83, 0.40);
+    --hit-active: rgba(68, 127, 146, 0.34);
     --shadow: 0 18px 45px rgba(38, 31, 20, 0.13);
   }}
 
@@ -133,7 +133,7 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
   .reader {{
     height: 100vh;
     display: grid;
-    grid-template-columns: 290px minmax(0, 1fr);
+    grid-template-columns: 330px minmax(0, 1fr);
     gap: 0;
     overflow: hidden;
     border: 1px solid var(--line);
@@ -142,10 +142,10 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
 
   .sidebar {{
     min-width: 0;
-    display: grid;
-    grid-template-rows: auto auto auto minmax(0, 1fr);
+    display: flex;
+    flex-direction: column;
     gap: 14px;
-    padding: 18px;
+    padding: 18px 18px 16px;
     border-right: 1px solid var(--line);
     background: #f9f7f2;
   }}
@@ -157,7 +157,7 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
 
   .title h1 {{
     margin: 0;
-    font-size: 18px;
+    font-size: 19px;
     line-height: 1.25;
     font-weight: 700;
     letter-spacing: 0;
@@ -171,6 +171,14 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
 
   .title a:hover {{
     text-decoration: underline;
+  }}
+
+  .rail-label {{
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
   }}
 
   .search {{
@@ -248,7 +256,46 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
     text-overflow: ellipsis;
   }}
 
+  .context {{
+    display: grid;
+    gap: 8px;
+    padding: 13px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: white;
+  }}
+
+  .context-title {{
+    color: var(--accent-strong);
+    font-size: 13px;
+    font-weight: 800;
+  }}
+
+  .context-body {{
+    color: var(--muted);
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 14px;
+    line-height: 1.45;
+  }}
+
+  .chips {{
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }}
+
+  .chip {{
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 4px 8px;
+    color: var(--muted);
+    background: rgba(255, 255, 255, 0.72);
+    font-size: 11px;
+    font-weight: 700;
+  }}
+
   .results {{
+    flex: 1 1 auto;
     min-height: 0;
     overflow: auto;
     display: grid;
@@ -299,15 +346,66 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
   .main {{
     min-width: 0;
     display: grid;
-    grid-template-columns: minmax(340px, 1.08fr) minmax(320px, 0.92fr);
+    grid-template-rows: auto minmax(0, 1fr);
     gap: 1px;
     background: var(--line);
     overflow: hidden;
   }}
 
+  .stage-header {{
+    min-width: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 16px;
+    align-items: center;
+    padding: 13px 18px;
+    border-bottom: 1px solid var(--line);
+    background: rgba(255, 254, 250, 0.96);
+  }}
+
+  .stage-title {{
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+  }}
+
+  .stage-title strong {{
+    overflow: hidden;
+    color: var(--ink);
+    font-size: 16px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }}
+
+  .stage-title span,
+  .stage-meta {{
+    color: var(--muted);
+    font-size: 12px;
+  }}
+
+  .stage-meta {{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+  }}
+
+  .stage-meta b {{
+    color: var(--accent-strong);
+  }}
+
+  .stage {{
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(360px, 1.08fr) minmax(340px, 0.92fr);
+    gap: 1px;
+    overflow: hidden;
+    background: var(--line);
+  }}
+
   .pane {{
     min-width: 0;
-    height: 100vh;
+    height: 100%;
     overflow: auto;
     scroll-behavior: smooth;
     background: var(--bg);
@@ -331,7 +429,7 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
   }}
 
   .pdf-page.active {{
-    outline: 3px solid rgba(43, 111, 120, 0.22);
+    outline: 3px solid rgba(36, 78, 96, 0.20);
   }}
 
   .pdf-page img {{
@@ -362,8 +460,12 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
   .text-page {{
     max-width: 760px;
     margin: 0 auto 28px;
-    padding-bottom: 24px;
+    padding: 14px 18px 24px;
     border-bottom: 1px solid var(--line);
+  }}
+
+  .text-page.active {{
+    background: rgba(237, 243, 244, 0.72);
   }}
 
   .text-page.active .page-label {{
@@ -401,8 +503,6 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
     }}
 
     .sidebar {{
-      grid-template-columns: 1fr;
-      grid-template-rows: auto auto auto;
       border-right: 0;
       border-bottom: 1px solid var(--line);
       max-height: 330px;
@@ -412,7 +512,11 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
       max-height: 120px;
     }}
 
-    .main {{
+    .stage-header {{
+      grid-template-columns: 1fr;
+    }}
+
+    .stage {{
       grid-template-columns: 1fr;
     }}
 
@@ -426,6 +530,7 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
 <div class="reader">
   <aside class="sidebar">
     <div class="title">
+      <div class="rail-label">Bank of Israel Reader</div>
       <h1 id="docTitle"></h1>
       <a id="sourceLink" target="_blank" rel="noreferrer">Source PDF</a>
     </div>
@@ -446,11 +551,34 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
       </label>
       <button id="nextPage" type="button" title="Next page">&rsaquo;</button>
     </div>
+    <section class="context">
+      <div class="rail-label">Selected source</div>
+      <div id="selectedTitle" class="context-title">Page 1</div>
+      <div id="selectedContext" class="context-body">Search or scroll to focus a passage.</div>
+      <div class="chips">
+        <span class="chip">Annotations</span>
+        <span class="chip">Bookmarks</span>
+        <span class="chip">Citations</span>
+        <span class="chip">Ask AI</span>
+      </div>
+    </section>
     <div id="results" class="results"></div>
   </aside>
   <main class="main">
-    <section id="pdfPane" class="pane pdf-pane" aria-label="PDF pages"></section>
-    <section id="textPane" class="pane text-pane" aria-label="Extracted text"></section>
+    <header class="stage-header">
+      <div class="stage-title">
+        <span>PDF + extracted text</span>
+        <strong id="stageTitle"></strong>
+      </div>
+      <div class="stage-meta">
+        <span>Page <b id="livePage">1</b> of <b id="liveTotal">1</b></span>
+        <span id="liveMatches">No query</span>
+      </div>
+    </header>
+    <div class="stage">
+      <section id="pdfPane" class="pane pdf-pane" aria-label="PDF pages"></section>
+      <section id="textPane" class="pane text-pane" aria-label="Extracted text"></section>
+    </div>
   </main>
 </div>
 <script id="payload" type="application/json">{payload}</script>
@@ -474,11 +602,19 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
   const resultCount = document.getElementById("resultCount");
   const pageInput = document.getElementById("pageInput");
   const pageTotal = document.getElementById("pageTotal");
+  const selectedTitle = document.getElementById("selectedTitle");
+  const selectedContext = document.getElementById("selectedContext");
+  const stageTitle = document.getElementById("stageTitle");
+  const livePage = document.getElementById("livePage");
+  const liveTotal = document.getElementById("liveTotal");
+  const liveMatches = document.getElementById("liveMatches");
 
   document.getElementById("docTitle").textContent = payload.title;
+  stageTitle.textContent = payload.title;
   document.getElementById("sourceLink").href = payload.sourceUrl;
   pageInput.max = String(Math.max(1, payload.pageCount || pages.length || 1));
   pageTotal.textContent = "/ " + pageInput.max;
+  liveTotal.textContent = pageInput.max;
 
   function escapeHtml(value) {{
     return String(value)
@@ -553,6 +689,15 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
     const left = before > 0 ? "... " : "";
     const right = after < page.words.length ? " ..." : "";
     return left + page.words.slice(before, after).map(word => word.t).join(" ") + right;
+  }}
+
+  function pagePreview(pageNumber) {{
+    const page = pages[pageNumber - 1];
+    if (!page) {{
+      return "No page selected.";
+    }}
+    const text = String(page.text || "").replace(/\\s+/g, " ").trim();
+    return text ? text.slice(0, 260) + (text.length > 260 ? " ..." : "") : "No extracted text on this page.";
   }}
 
   function buildMatches() {{
@@ -634,12 +779,14 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
   function renderResults() {{
     if (!state.queryParts.length) {{
       resultCount.textContent = "No query";
+      liveMatches.textContent = "No query";
       resultsEl.innerHTML = '<div class="empty">Search this document</div>';
       return;
     }}
 
     const count = state.matches.length;
     resultCount.textContent = count === 1 ? "1 result" : count + " results";
+    liveMatches.textContent = resultCount.textContent;
     if (!count) {{
       resultsEl.innerHTML = '<div class="empty">No matches</div>';
       return;
@@ -663,9 +810,11 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
     const max = pages.length || 1;
     state.activePage = Math.min(Math.max(1, Number(pageNumber) || 1), max);
     pageInput.value = String(state.activePage);
+    livePage.textContent = String(state.activePage);
     document.querySelectorAll("[data-page]").forEach(node => {{
       node.classList.toggle("active", Number(node.dataset.page) === state.activePage);
     }});
+    updateSelectedContext();
   }}
 
   function scrollPaneToPage(pane, pageNumber) {{
@@ -697,11 +846,23 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
     state.activeResult = resultId;
     renderHighlights();
     renderResults();
+    updateSelectedContext(match);
     scrollToPage(match.page);
     const selected = resultsEl.querySelector(`[data-result="${{resultId}}"]`);
     if (selected) {{
       selected.scrollIntoView({{ block: "nearest", behavior: "smooth" }});
     }}
+  }}
+
+  function updateSelectedContext(match) {{
+    const activeMatch = match || state.matches.find(item => item.id === state.activeResult);
+    if (activeMatch) {{
+      selectedTitle.textContent = `Page ${{activeMatch.page}} - ${{activeMatch.label}}`;
+      selectedContext.textContent = activeMatch.snippet;
+      return;
+    }}
+    selectedTitle.textContent = `Page ${{state.activePage}}`;
+    selectedContext.textContent = pagePreview(state.activePage);
   }}
 
   function findVisiblePage(pane) {{
@@ -743,6 +904,11 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
     renderPages();
     renderHighlights();
     renderResults();
+    if (state.activeResult >= 0) {{
+      updateSelectedContext(state.matches[0]);
+    }} else {{
+      updateSelectedContext();
+    }}
     setActivePage(state.activePage);
   }}
 
