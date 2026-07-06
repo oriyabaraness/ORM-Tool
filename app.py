@@ -569,16 +569,26 @@ with tab_proper_conduct:
         st.markdown(f"**{len(directive_view):,}** directives match.")
         table = directive_view[[
             "directive_number", "circular_number", "publication_date",
-            "title_display", "subject", "lastmod", "url", "file_url"
+            "title_display", "subject", "lastmod", "url"
         ]].copy()
+        table["directive_link"] = (
+            table["url"].str.rstrip("/")
+            + "/#directive-"
+            + table["directive_number"])
+        table = table[[
+            "directive_link", "circular_number", "publication_date",
+            "title_display", "subject", "lastmod"
+        ]]
         st.dataframe(
             table,
             hide_index=True,
             width="stretch",
             height=420,
             column_config={
-                "directive_number": st.column_config.TextColumn(
-                    "Directive #", width="small"),
+                "directive_link": st.column_config.LinkColumn(
+                    "Directive #",
+                    width="small",
+                    display_text=r"#directive-([^#]+)$"),
                 "circular_number": st.column_config.TextColumn(
                     "Circular #", width="small"),
                 "publication_date": st.column_config.TextColumn(
@@ -586,8 +596,6 @@ with tab_proper_conduct:
                 "title_display": "Title",
                 "subject": "Subject",
                 "lastmod": st.column_config.TextColumn("Updated", width="medium"),
-                "url": st.column_config.LinkColumn("URL"),
-                "file_url": st.column_config.LinkColumn("Download"),
             })
         export_cols = [
             "directive_number", "circular_number", "publication_date",
