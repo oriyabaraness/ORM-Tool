@@ -21,6 +21,11 @@ The Streamlit app expects the CSV catalog files in this directory and extracted
 text files under `boi_texts/`. Full-text search uses
 `boi_pdf_text_manifest.csv` plus the gzip text files in `boi_texts/`.
 
+The Reader tab opens any PDF from `boi_pdf_links.csv` in an interactive
+side-by-side viewer. It downloads the selected publication on demand, renders
+the original PDF pages, extracts page text and word boxes, and supports
+in-document search with synchronized PDF/text navigation.
+
 To add more PDFs to the searchable full-text corpus:
 
 ```bash

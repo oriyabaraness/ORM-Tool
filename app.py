@@ -18,6 +18,7 @@ import re
 import pandas as pd
 import streamlit as st
 
+from boi_pdf_viewer import build_pdf_viewer_model, download_pdf, render_pdf_viewer
 from boi_pdf_text import extract_one, slug_for
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -93,6 +94,13 @@ def load_search_docs(signature):
 def get_text(url):
     """Download + extract a single PDF. Cached per URL. Returns (pages, text)."""
     return extract_one(url)
+
+
+@st.cache_data(show_spinner="Preparing reader...")
+def get_reader_model(url, title):
+    pdf_bytes = download_pdf(url)
+    model = build_pdf_viewer_model(pdf_bytes, title=title, source_url=url)
+    return model, pdf_bytes
 
 
 def file_mtime(path):
@@ -192,8 +200,8 @@ if not os.path.exists(LINKS):
     st.stop()
 
 catalog = load_catalog(file_mtime(LINKS))
-tab_catalog, tab_search, tab_overview = st.tabs(
-    ["📚 Catalog", "🔎 Full Text", "📊 Overview"])
+tab_catalog, tab_search, tab_reader, tab_overview = st.tabs(
+    ["📚 Catalog", "🔎 Full Text", "Reader", "📊 Overview"])
 
 # --------------------------------------------------------------------------- #
 # Catalog tab
@@ -357,6 +365,70 @@ with tab_search:
             st.info("No extracted document text matched that query.")
     elif docs.empty:
         st.warning("No extracted text files were found.")
+
+# --------------------------------------------------------------------------- #
+# Reader tab
+# --------------------------------------------------------------------------- #
+with tab_reader:
+    pdf_catalog = catalog[catalog["doc_type"].str.lower() == "pdf"].copy()
+    pdf_catalog = pdf_catalog.drop_duplicates(subset=["doc_url"]).reset_index(drop=True)
+
+    reader_query = st.text_input(
+        "Find PDF",
+        "",
+        placeholder="annual report, inflation, monetary policy",
+        key="reader_query")
+    reader_view = pdf_catalog
+    if reader_query:
+        q = reader_query.lower()
+        hay = (reader_view["source_title"] + " " + reader_view["doc_title"] + " "
+               + reader_view["doc_url"]).str.lower()
+        reader_view = reader_view[hay.str.contains(q, regex=False)]
+
+    def reader_label(index):
+        row = reader_view.loc[index]
+        title = row["source_title"] or row["doc_title"] or row["doc_url"].rsplit("/", 1)[-1]
+        date = str(row.get("lastmod", ""))[:10]
+        return f"{title} - {date}" if date else title
+
+    if reader_view.empty:
+        st.info("No PDFs match.")
+    else:
+        pick_col, action_col = st.columns([4, 1])
+        with pick_col:
+            selected_pdf = st.selectbox(
+                "Publication",
+                reader_view.index.tolist(),
+                format_func=reader_label,
+                key="reader_selected_pdf")
+        selected_row = reader_view.loc[selected_pdf]
+        selected_title = selected_row["source_title"] or selected_row["doc_title"]
+        selected_url = selected_row["doc_url"]
+
+        with action_col:
+            open_reader = st.button("Open reader", type="primary", width="stretch")
+
+        if open_reader:
+            st.session_state.reader_url = selected_url
+            st.session_state.reader_title = selected_title
+
+        if "reader_url" in st.session_state:
+            model, pdf_bytes = get_reader_model(
+                st.session_state.reader_url,
+                st.session_state.reader_title)
+
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Pages", f"{model['pageCount']:,}")
+            m2.metric("PDF size", f"{len(pdf_bytes) / 1024 / 1024:.1f} MB")
+            words = sum(len(page["words"]) for page in model["pages"])
+            m3.metric("Indexed words", f"{words:,}")
+
+            st.download_button(
+                "Download PDF",
+                pdf_bytes,
+                slug_for(st.session_state.reader_url) + ".pdf",
+                "application/pdf")
+            render_pdf_viewer(model)
 
 # --------------------------------------------------------------------------- #
 # Overview tab
