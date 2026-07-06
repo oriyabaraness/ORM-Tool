@@ -22,6 +22,9 @@ from boi_pdf_text import extract_one, slug_for
 HERE = os.path.dirname(os.path.abspath(__file__))
 LINKS = os.path.join(HERE, "boi_pdf_links.csv")
 BANKING_SUPERVISION = os.path.join(HERE, "boi_banking_supervision_index.csv")
+PUBLICATIONS_INDEX = os.path.join(HERE, "boi_publications_index.csv")
+PROPER_CONDUCT_DIRECTIVES = os.path.join(
+    HERE, "boi_proper_conduct_directives.csv")
 MANIFEST = os.path.join(HERE, "boi_pdf_text_manifest.csv")
 TEXT_DIR = os.path.join(HERE, "boi_texts")
 
@@ -42,10 +45,26 @@ def load_catalog(mtime):  # mtime busts the cache when the file changes
 def load_banking_supervision(mtime):
     if not os.path.exists(BANKING_SUPERVISION):
         return pd.DataFrame()
-    df = pd.read_csv(BANKING_SUPERVISION)
+    df = pd.read_csv(BANKING_SUPERVISION, dtype=str)
     for c in ("url", "title", "section", "lang", "lastmod"):
         if c in df.columns:
             df[c] = df[c].fillna("")
+    return df.drop_duplicates(subset=["url"])
+
+
+@st.cache_data(show_spinner=False)
+def load_publications_index(mtime):
+    if not os.path.exists(PUBLICATIONS_INDEX):
+        return pd.DataFrame()
+    df = pd.read_csv(PUBLICATIONS_INDEX, dtype=str).fillna("")
+    return df.drop_duplicates(subset=["url"])
+
+
+@st.cache_data(show_spinner=False)
+def load_proper_conduct_metadata(mtime):
+    if not os.path.exists(PROPER_CONDUCT_DIRECTIVES):
+        return pd.DataFrame()
+    df = pd.read_csv(PROPER_CONDUCT_DIRECTIVES, dtype=str).fillna("")
     return df.drop_duplicates(subset=["url"])
 
 
@@ -243,32 +262,100 @@ def build_reader_results(pdf_catalog, docs, query, limit=200):
     ).head(limit)
 
 
-def load_proper_conduct_directives():
-    df = load_banking_supervision(file_mtime(BANKING_SUPERVISION))
-    if df.empty:
-        return df
-    proper_conduct = df["url"].str.contains("/proper_conduct/", case=False, na=False)
-    title_match = df["title"].str.contains(
-        r"\bproper conduct\b", case=False, na=False, regex=True)
-    directives = df[proper_conduct | title_match].copy()
-    if directives.empty:
-        return directives
-    directives["title_display"] = directives["title"].str.title()
-    directives["source_type"] = directives["url"].apply(directive_source_type)
+def extract_directive_number(*parts):
+    text = " ".join(str(part or "") for part in parts).lower()
+    patterns = [
+        r"\bdirective\s+(?:no|number)\s*\.?\s*(\d{3}[a-z]?)\b",
+        r"\b(?:nbt|pc|enbt)[\s_-]*(\d{3}[a-z]?)\b",
+        r"\b(\d{3}[a-z]?)\s*(?:nbt|en|et)\b",
+        r"/(?:nbt|pc|enbt)?[_-]?(\d{3}[a-z]?)(?:[_-]?(?:en|et|nbt))?/?$",
+        r"\b(\d{3}[a-z]?)\b",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if match:
+            return match.group(1).upper()
+    return ""
+
+
+def prepare_proper_conduct_directives(df):
+    required = (
+        "title", "url", "lastmod", "publication_date", "directive_number",
+        "circular_number", "area", "subject", "file_url", "page_title",
+        "status")
+    directives = df.copy()
+    for col in required:
+        if col not in directives.columns:
+            directives[col] = ""
+        directives[col] = directives[col].fillna("").astype(str)
+
+    if "status" in directives.columns:
+        status = directives["status"].str.lower()
+        directives = directives[status.isin(("", "ok"))].copy()
+
+    title = directives["page_title"].where(
+        directives["page_title"].str.len() > 0, directives["title"])
+    directives["title_display"] = title.str.replace(r"\s+", " ", regex=True)
+    missing_numbers = directives["directive_number"].str.len() == 0
+    directives.loc[missing_numbers, "directive_number"] = directives[
+        missing_numbers].apply(
+            lambda row: extract_directive_number(
+                row["title"], row["page_title"], row["url"]),
+            axis=1)
+
+    sort_number = directives["directive_number"].str.extract(r"(\d+)")[0]
+    directives["_sort_number"] = pd.to_numeric(
+        sort_number, errors="coerce").fillna(9999).astype(int)
+    directives["_sort_suffix"] = directives["directive_number"].str.extract(
+        r"\d+([A-Za-z]+)")[0].fillna("")
     return directives.sort_values(
-        ["lastmod", "title_display"], ascending=[False, True])
+        ["_sort_number", "_sort_suffix", "title_display"],
+        ascending=[True, True, True])
 
 
-def directive_source_type(url):
-    if "/proper_conduct/" in url:
-        return "Proper conduct"
-    if "/circulars/" in url:
-        return "Circular"
-    if "/letters/" in url:
-        return "Letter"
-    if "/press-releases/" in url:
-        return "Press release"
-    return "Other"
+def load_proper_conduct_directives():
+    directives = load_proper_conduct_metadata(
+        file_mtime(PROPER_CONDUCT_DIRECTIVES))
+    if directives.empty:
+        publications = load_publications_index(file_mtime(PUBLICATIONS_INDEX))
+        if publications.empty:
+            return publications
+        proper = publications["url"].str.contains(
+            "/proper_conduct/", case=False, na=False)
+        directives = publications[proper].copy()
+        slugs = directives["url"].str.rstrip("/").str.split("/").str[-1]
+        directives = directives[slugs != "proper_conduct"]
+    return prepare_proper_conduct_directives(directives)
+
+
+def filter_proper_conduct_directives(directives, query):
+    query = query.strip()
+    if not query:
+        return directives
+
+    search_cols = [
+        "directive_number", "circular_number", "title_display",
+        "title", "page_title", "publication_date", "subject", "area",
+        "url", "file_url",
+    ]
+    hay = directives[search_cols].fillna("").agg(" ".join, axis=1).str.lower()
+    mask = pd.Series(True, index=directives.index)
+    for term in parse_terms(query):
+        term = term.lower()
+        if re.fullmatch(r"\d{3,4}[a-z]?", term):
+            directive_numbers = directives["directive_number"].str.lower()
+            circular_numbers = directives["circular_number"].str.lower()
+            if re.fullmatch(r"\d{3,4}", term):
+                mask &= (
+                    directive_numbers.str.startswith(term)
+                    | circular_numbers.eq(term))
+            else:
+                mask &= (
+                    directive_numbers.eq(term)
+                    | circular_numbers.eq(term))
+        else:
+            mask &= hay.str.contains(term, regex=False)
+    return directives[mask]
 
 
 st.title("🏦 Bank of Israel Publications Explorer")
@@ -458,50 +545,31 @@ with tab_proper_conduct:
 
     d1, d2, d3 = st.columns(3)
     d1.metric("Directives", f"{len(directives):,}")
-    source_count = directives["source_type"].nunique() if not directives.empty else 0
-    d2.metric("Source types", f"{source_count:,}")
+    numbered = (
+        int(directives["directive_number"].str.len().gt(0).sum())
+        if not directives.empty else 0)
+    d2.metric("Numbered", f"{numbered:,}")
     latest = directives["lastmod"].max()[:10] if not directives.empty else ""
     d3.metric("Latest update", latest or "n/a")
 
     if directives.empty:
         st.info("No Proper Conduct of Banking Business Directives were found.")
     else:
-        q_col, type_col, lang_col = st.columns([3, 1.3, 1])
-        with q_col:
-            directive_query = st.text_input(
-                "Search directives",
-                "",
-                placeholder="board of directors, AML, coronavirus",
-                key="proper_conduct_query")
-        with type_col:
-            source_types = sorted(t for t in directives["source_type"].unique() if t)
-            selected_types = st.multiselect(
-                "Type",
-                source_types,
-                default=source_types,
-                key="proper_conduct_types")
-        with lang_col:
-            langs = sorted(lang for lang in directives["lang"].unique() if lang)
-            selected_langs = st.multiselect(
-                "Language",
-                langs,
-                default=langs,
-                key="proper_conduct_langs")
+        directive_query = st.text_input(
+            "Search directives",
+            "",
+            placeholder="201, 301A, 2607, board of directors",
+            key="proper_conduct_query")
 
         directive_view = directives
         if directive_query:
-            q = directive_query.lower()
-            hay = (directive_view["title"] + " " + directive_view["url"]).str.lower()
-            directive_view = directive_view[hay.str.contains(q, regex=False)]
-        if selected_types:
-            directive_view = directive_view[
-                directive_view["source_type"].isin(selected_types)]
-        if selected_langs:
-            directive_view = directive_view[directive_view["lang"].isin(selected_langs)]
+            directive_view = filter_proper_conduct_directives(
+                directive_view, directive_query)
 
         st.markdown(f"**{len(directive_view):,}** directives match.")
         table = directive_view[[
-            "title_display", "source_type", "lang", "lastmod", "url"
+            "directive_number", "circular_number", "publication_date",
+            "title_display", "subject", "lastmod", "url", "file_url"
         ]].copy()
         st.dataframe(
             table,
@@ -509,16 +577,25 @@ with tab_proper_conduct:
             width="stretch",
             height=420,
             column_config={
+                "directive_number": st.column_config.TextColumn(
+                    "Directive #", width="small"),
+                "circular_number": st.column_config.TextColumn(
+                    "Circular #", width="small"),
+                "publication_date": st.column_config.TextColumn(
+                    "Published", width="small"),
                 "title_display": "Title",
-                "source_type": "Type",
-                "lang": st.column_config.TextColumn("Lang", width="small"),
+                "subject": "Subject",
                 "lastmod": st.column_config.TextColumn("Updated", width="medium"),
                 "url": st.column_config.LinkColumn("URL"),
+                "file_url": st.column_config.LinkColumn("Download"),
             })
+        export_cols = [
+            "directive_number", "circular_number", "publication_date",
+            "title_display", "subject", "area", "lastmod", "url", "file_url",
+        ]
         st.download_button(
             "Download directives (CSV)",
-            directive_view.drop(columns=["title_display"]).to_csv(
-                index=False).encode("utf-8"),
+            directive_view[export_cols].to_csv(index=False).encode("utf-8"),
             "proper_conduct_banking_business_directives.csv",
             "text/csv")
 
