@@ -564,13 +564,12 @@ def apply_library_styles():
         }
 
         .boi-topbar {
-            display: flex;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) max-content;
             align-items: center;
-            justify-content: space-between;
-            flex-wrap: nowrap;
-            gap: clamp(0.75rem, 2vw, 1.5rem);
+            column-gap: clamp(0.8rem, 2vw, 1.5rem);
             border-bottom: 1px solid var(--boi-line);
-            padding-bottom: 0.9rem;
+            padding: 0.2rem 0 0.9rem;
             margin-bottom: 1.85rem;
         }
 
@@ -589,11 +588,13 @@ def apply_library_styles():
         .boi-nav {
             display: flex;
             align-items: center;
-            flex: 0 0 auto;
+            justify-content: flex-end;
             flex-wrap: nowrap;
-            gap: clamp(0.55rem, 1.1vw, 1.1rem);
+            min-width: max-content;
+            gap: clamp(0.5rem, 1vw, 0.95rem);
             color: var(--boi-muted);
-            font-size: clamp(0.82rem, 1vw, 0.96rem);
+            font-size: clamp(0.78rem, 0.95vw, 0.94rem);
+            line-height: 1.45;
             white-space: nowrap;
         }
 
@@ -739,8 +740,8 @@ def apply_library_styles():
             }
 
             .boi-nav {
-                font-size: 0.78rem;
-                gap: 0.48rem;
+                font-size: 0.74rem;
+                gap: 0.42rem;
             }
 
             .boi-shelf-copy {
