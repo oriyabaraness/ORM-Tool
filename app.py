@@ -210,7 +210,7 @@ def start_pdf_text_index():
         log.write(f"\n\n== started {time.strftime('%Y-%m-%d %H:%M:%S')} ==\n")
         log.flush()
         proc = subprocess.Popen(
-            [sys.executable, "boi_pdf_text.py"],
+            [sys.executable, "-u", "boi_pdf_text.py"],
             cwd=HERE,
             stdout=log,
             stderr=subprocess.STDOUT,
