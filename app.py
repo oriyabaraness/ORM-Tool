@@ -2,8 +2,8 @@
 Bank of Israel Publications Explorer -- a Streamlit UI over the crawl/extract
 pipeline.
 
-  Library layout: browse the catalog, Proper Conduct directives, and the
-                  PDF reader from a Sefaria-style index page.
+  Library layout: browse the catalog and PDF reader from a Sefaria-style
+                  index page.
 Run with:  streamlit run app.py   (from inside the .venv)
 
 Text extraction reuses boi_pdf_text.extract_one, and results are cached per URL.
@@ -536,36 +536,6 @@ def load_proper_conduct_directives():
     return prepare_proper_conduct_directives(directives)
 
 
-def filter_proper_conduct_directives(directives, query):
-    query = query.strip()
-    if not query:
-        return directives
-
-    search_cols = [
-        "directive_number", "circular_number", "title_display",
-        "title", "page_title", "publication_date", "subject",
-        "subject_display", "area", "url", "file_url",
-    ]
-    hay = directives[search_cols].fillna("").agg(" ".join, axis=1).str.lower()
-    mask = pd.Series(True, index=directives.index)
-    for term in parse_terms(query):
-        term = term.lower()
-        if re.fullmatch(r"\d{3,4}[a-z]?", term):
-            directive_numbers = directives["directive_number"].str.lower()
-            circular_numbers = directives["circular_number"].str.lower()
-            if re.fullmatch(r"\d{3,4}", term):
-                mask &= (
-                    directive_numbers.str.startswith(term)
-                    | circular_numbers.eq(term))
-            else:
-                mask &= (
-                    directive_numbers.eq(term)
-                    | circular_numbers.eq(term))
-        else:
-            mask &= hay.str.contains(term, regex=False)
-    return directives[mask]
-
-
 def apply_library_styles():
     st.markdown(
         """
@@ -597,7 +567,8 @@ def apply_library_styles():
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 1.5rem;
+            flex-wrap: nowrap;
+            gap: clamp(0.75rem, 2vw, 1.5rem);
             border-bottom: 1px solid var(--boi-line);
             padding-bottom: 0.9rem;
             margin-bottom: 1.85rem;
@@ -605,7 +576,12 @@ def apply_library_styles():
 
         .boi-brand {
             color: var(--boi-ink);
-            font-size: 1.18rem;
+            flex: 1 1 auto;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: clamp(0.96rem, 1.35vw, 1.18rem);
             font-weight: 650;
             line-height: 1.2;
         }
@@ -613,10 +589,16 @@ def apply_library_styles():
         .boi-nav {
             display: flex;
             align-items: center;
-            gap: 1.1rem;
+            flex: 0 0 auto;
+            flex-wrap: nowrap;
+            gap: clamp(0.55rem, 1.1vw, 1.1rem);
             color: var(--boi-muted);
-            font-size: 0.96rem;
+            font-size: clamp(0.82rem, 1vw, 0.96rem);
             white-space: nowrap;
+        }
+
+        .boi-nav span {
+            flex: 0 0 auto;
         }
 
         .boi-nav span:first-child {
@@ -751,15 +733,14 @@ def apply_library_styles():
         }
 
         @media (max-width: 820px) {
-            .boi-topbar,
             .boi-library-head,
             .boi-shelf-item {
                 display: block;
             }
 
             .boi-nav {
-                margin-top: 0.8rem;
-                overflow-x: auto;
+                font-size: 0.78rem;
+                gap: 0.48rem;
             }
 
             .boi-shelf-copy {
@@ -816,22 +797,15 @@ def render_library_shell(catalog, directives):
                         <div class="boi-shelf-count">{len(catalog):,} docs</div>
                     </div>
                     <div class="boi-shelf-item">
-                        <div class="boi-shelf-title">
-                            Proper Conduct of Banking Business Directives
-                        </div>
-                        <div class="boi-shelf-copy">
-                            Directive numbers, circular numbers, publication
-                            dates, English subjects, PDF previews, and source pages.
-                        </div>
-                        <div class="boi-shelf-count">{numbered:,} numbered</div>
-                    </div>
-                    <div class="boi-shelf-item">
                         <div class="boi-shelf-title">Reader</div>
                         <div class="boi-shelf-copy">
-                            Searchable PDFs with extracted text, highlighted
-                            matches, page navigation, and downloadable sources.
+                            Searchable PDFs, including Proper Conduct directives,
+                            with extracted text, highlighted matches, page
+                            navigation, and downloadable sources.
                         </div>
-                        <div class="boi-shelf-count">{pdf_count:,} PDFs</div>
+                        <div class="boi-shelf-count">
+                            {pdf_count:,} PDFs / {numbered:,} directives
+                        </div>
                     </div>
                 </div>
             </div>
@@ -858,18 +832,19 @@ def render_library_shell(catalog, directives):
 
     sections = [
         "Catalog",
-        "Proper Conduct of Banking Business Directives",
         "Reader",
     ]
-    selected = st.segmented_control(
-        "Library section",
-        sections,
-        default="Proper Conduct of Banking Business Directives",
-        key="library_section",
-        label_visibility="collapsed",
-        width="stretch")
+    _, selector_col, _ = st.columns([1, 2, 1])
+    with selector_col:
+        selected = st.segmented_control(
+            "Library section",
+            sections,
+            default="Catalog",
+            key="library_section",
+            label_visibility="collapsed",
+            width="stretch")
     st.markdown('<div class="boi-section-rule"></div>', unsafe_allow_html=True)
-    return selected or "Proper Conduct of Banking Business Directives"
+    return selected or "Catalog"
 
 
 def render_section_heading(title):
@@ -961,123 +936,6 @@ def render_catalog_section(catalog):
             prog.progress(i / len(chosen))
         prog.empty()
         st.success(f"Extracted {len(chosen)} document(s).")
-
-
-def render_proper_conduct_section(directives):
-    render_section_heading("Proper Conduct of Banking Business Directives")
-
-    d1, d2, d3 = st.columns(3)
-    d1.metric("Directives", f"{len(directives):,}")
-    numbered = (
-        int(directives["directive_number"].str.len().gt(0).sum())
-        if not directives.empty else 0)
-    d2.metric("Numbered", f"{numbered:,}")
-    latest = directives["lastmod"].max()[:10] if not directives.empty else ""
-    d3.metric("Latest update", latest or "n/a")
-
-    if directives.empty:
-        st.info("No Proper Conduct of Banking Business Directives were found.")
-        return
-
-    directive_query = st.text_input(
-        "Search directives",
-        "",
-        placeholder="201, 301A, 2607, board of directors, Credit Risk",
-        key="proper_conduct_query")
-
-    directive_view = directives
-    if directive_query:
-        directive_view = filter_proper_conduct_directives(
-            directive_view, directive_query)
-
-    st.markdown(f"**{len(directive_view):,}** directives match.")
-    table = directive_view[[
-        "directive_number", "circular_number", "publication_date",
-        "title_display", "subject_display", "lastmod", "url"
-    ]].copy()
-    table["directive_link"] = (
-        table["url"].str.rstrip("/")
-        + "/#directive-"
-        + table["directive_number"])
-    table = table[[
-        "directive_link", "circular_number", "publication_date",
-        "title_display", "subject_display", "lastmod"
-    ]]
-    st.dataframe(
-        table,
-        hide_index=True,
-        width="stretch",
-        height=420,
-        column_config={
-            "directive_link": st.column_config.LinkColumn(
-                "Directive #",
-                width="small",
-                display_text=r"#directive-([^#]+)$"),
-            "circular_number": st.column_config.TextColumn(
-                "Circular #", width="small"),
-            "publication_date": st.column_config.TextColumn(
-                "Published", width="small"),
-            "title_display": "Title",
-            "subject_display": "Subject",
-            "lastmod": st.column_config.TextColumn("Updated", width="medium"),
-        })
-    export_cols = [
-        "directive_number", "circular_number", "publication_date",
-        "title_display", "subject_display", "subject", "area", "lastmod",
-        "url", "file_url",
-    ]
-    st.download_button(
-        "Download directives (CSV)",
-        directive_view[export_cols].to_csv(index=False).encode("utf-8"),
-        "proper_conduct_banking_business_directives.csv",
-        "text/csv")
-
-    if directive_view.empty:
-        return
-
-    def directive_preview_label(index):
-        row = directive_view.loc[index]
-        number = row["directive_number"]
-        title = row["title_display"] or row["title"]
-        return f"{number} - {title}" if number else title
-
-    selected_directive = st.selectbox(
-        "Preview directive",
-        directive_view.index.tolist(),
-        format_func=directive_preview_label,
-        key="proper_conduct_preview_directive")
-    selected = directive_view.loc[selected_directive]
-    st.markdown(
-        f"**{selected['directive_number']}** "
-        f"{selected['title_display']}")
-
-    page_col, pdf_col = st.columns(2)
-    with page_col:
-        st.link_button(
-            "Open directive page",
-            selected["url"],
-            width="stretch")
-    with pdf_col:
-        st.link_button(
-            "Open PDF",
-            selected["file_url"],
-            width="stretch")
-
-    if selected["file_url"]:
-        try:
-            model, directive_pdf = get_reader_model(
-                selected["file_url"],
-                selected["title_display"])
-            st.download_button(
-                "Download PDF",
-                directive_pdf,
-                slug_for(selected["file_url"]) + ".pdf",
-                "application/pdf")
-            render_pdf_viewer(model, height=720)
-        except Exception as e:
-            st.error(f"Unable to load PDF preview: {e}")
-    else:
-        st.info("No PDF file is available for this directive.")
 
 
 def render_reader_section(catalog, directives):
@@ -1241,7 +1099,5 @@ section = render_library_shell(catalog, directives)
 
 if section == "Catalog":
     render_catalog_section(catalog)
-elif section == "Reader":
-    render_reader_section(catalog, directives)
 else:
-    render_proper_conduct_section(directives)
+    render_reader_section(catalog, directives)
