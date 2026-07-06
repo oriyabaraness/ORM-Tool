@@ -2,9 +2,8 @@
 Bank of Israel Publications Explorer -- a Streamlit UI over the crawl/extract
 pipeline.
 
-  Catalog tab : search & filter the document catalog (boi_pdf_links.csv), pick
-                publications, extract their text on the spot, read it, and
-                download the text or the source PDF.
+  Library layout: browse the catalog, Proper Conduct directives, and the
+                  PDF reader from a Sefaria-style index page.
 Run with:  streamlit run app.py   (from inside the .venv)
 
 Text extraction reuses boi_pdf_text.extract_one, and results are cached per URL.
@@ -403,40 +402,340 @@ def filter_proper_conduct_directives(directives, query):
     return directives[mask]
 
 
-st.title("🏦 Bank of Israel Publications Explorer")
+def apply_library_styles():
+    st.markdown(
+        """
+        <style>
+        :root {
+            --boi-ink: #202124;
+            --boi-muted: #5f6368;
+            --boi-line: #d8d2c6;
+            --boi-accent: #a34f36;
+            --boi-link: #1f5f73;
+            --boi-bg-soft: #f7f4ef;
+        }
 
-if not os.path.exists(LINKS):
-    st.warning(
-        "No catalog yet. Run **`python3 boi_pdf_extractor.py`** first to build "
-        "`boi_pdf_links.csv`, then reload this page.")
-    st.stop()
+        .block-container {
+            max-width: 1180px;
+            padding-top: 2.1rem;
+            padding-bottom: 3rem;
+        }
 
-catalog = load_catalog(file_mtime(LINKS))
-tab_catalog, tab_proper_conduct, tab_reader = st.tabs([
-    "📚 Catalog",
-    "Proper Conduct of Banking Business Directives",
-    "Reader",
-])
+        [data-testid="stSidebar"] {
+            display: none;
+        }
 
-# --------------------------------------------------------------------------- #
-# Catalog tab
-# --------------------------------------------------------------------------- #
-with tab_catalog:
-    with st.sidebar:
-        st.header("Filters")
-        query = st.text_input("Search title / URL", "",
-                              placeholder="e.g. annual report, inflation")
-        sections = sorted(s for s in catalog["section"].unique() if s)
+        h1, h2, h3, p, div, span, label {
+            letter-spacing: 0;
+        }
+
+        .boi-topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1.5rem;
+            border-bottom: 1px solid var(--boi-line);
+            padding-bottom: 0.9rem;
+            margin-bottom: 1.85rem;
+        }
+
+        .boi-brand {
+            color: var(--boi-ink);
+            font-size: 1.18rem;
+            font-weight: 650;
+            line-height: 1.2;
+        }
+
+        .boi-nav {
+            display: flex;
+            align-items: center;
+            gap: 1.1rem;
+            color: var(--boi-muted);
+            font-size: 0.96rem;
+            white-space: nowrap;
+        }
+
+        .boi-nav span:first-child {
+            color: var(--boi-accent);
+            font-weight: 650;
+        }
+
+        .boi-library-head {
+            display: grid;
+            grid-template-columns: minmax(0, 1.8fr) minmax(280px, 0.9fr);
+            gap: 3.6rem;
+            align-items: start;
+            margin-bottom: 1.25rem;
+        }
+
+        .boi-kicker {
+            color: var(--boi-muted);
+            font-size: 0.9rem;
+            font-weight: 650;
+            margin-bottom: 0.45rem;
+            text-transform: uppercase;
+        }
+
+        .boi-page-title {
+            color: var(--boi-ink);
+            font-size: clamp(2.2rem, 5vw, 4.4rem);
+            font-weight: 500;
+            line-height: 1.03;
+            margin: 0 0 1.35rem;
+        }
+
+        .boi-language-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            border: 1px solid var(--boi-line);
+            border-radius: 999px;
+            padding: 0.28rem 0.65rem;
+            color: var(--boi-muted);
+            font-size: 0.92rem;
+        }
+
+        .boi-language-toggle strong {
+            color: var(--boi-ink);
+            font-weight: 650;
+        }
+
+        .boi-shelf {
+            border-top: 1px solid var(--boi-line);
+            margin-top: 1.2rem;
+        }
+
+        .boi-shelf-item {
+            display: grid;
+            grid-template-columns: minmax(180px, 0.8fr) minmax(0, 1.35fr) auto;
+            gap: 1.4rem;
+            align-items: start;
+            border-bottom: 1px solid var(--boi-line);
+            padding: 1.15rem 0;
+        }
+
+        .boi-shelf-title {
+            color: var(--boi-link);
+            font-size: 1.45rem;
+            font-weight: 500;
+            line-height: 1.15;
+        }
+
+        .boi-shelf-copy {
+            color: var(--boi-muted);
+            font-size: 0.98rem;
+            line-height: 1.52;
+        }
+
+        .boi-shelf-count {
+            color: var(--boi-ink);
+            font-size: 0.92rem;
+            font-weight: 650;
+            white-space: nowrap;
+        }
+
+        .boi-info-panel {
+            border-top: 1px solid var(--boi-line);
+            border-bottom: 1px solid var(--boi-line);
+            padding: 1rem 0 1.15rem;
+        }
+
+        .boi-info-panel + .boi-info-panel {
+            margin-top: 1.4rem;
+        }
+
+        .boi-panel-title {
+            color: var(--boi-ink);
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 0.45rem;
+        }
+
+        .boi-panel-copy, .boi-panel-list {
+            color: var(--boi-muted);
+            font-size: 0.96rem;
+            line-height: 1.52;
+        }
+
+        .boi-panel-list {
+            display: grid;
+            gap: 0.55rem;
+            margin-top: 0.75rem;
+        }
+
+        .boi-section-rule {
+            border-top: 1px solid var(--boi-line);
+            margin: 1.4rem 0 1.2rem;
+        }
+
+        .boi-section-title {
+            color: var(--boi-ink);
+            font-size: 1.75rem;
+            font-weight: 550;
+            margin: 0 0 0.6rem;
+        }
+
+        div[data-testid="stSegmentedControl"] {
+            margin: 0.75rem 0 0.2rem;
+        }
+
+        div[data-testid="stMetric"] {
+            background: var(--boi-bg-soft);
+            border: 1px solid #e7e1d7;
+            border-radius: 8px;
+            padding: 0.75rem 0.9rem;
+        }
+
+        @media (max-width: 820px) {
+            .boi-topbar,
+            .boi-library-head,
+            .boi-shelf-item {
+                display: block;
+            }
+
+            .boi-nav {
+                margin-top: 0.8rem;
+                overflow-x: auto;
+            }
+
+            .boi-shelf-copy {
+                margin-top: 0.35rem;
+            }
+
+            .boi-shelf-count {
+                margin-top: 0.65rem;
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True)
+
+
+def render_library_shell(catalog, directives):
+    pdf_count = (
+        int(catalog["doc_type"].str.lower().eq("pdf").sum())
+        if "doc_type" in catalog.columns else 0)
+    numbered = (
+        int(directives["directive_number"].str.len().gt(0).sum())
+        if not directives.empty else 0)
+    latest = directives["lastmod"].max()[:10] if not directives.empty else "n/a"
+    manifest = load_text_manifest(file_mtime(MANIFEST))
+    indexed_docs = 0
+    if not manifest.empty:
+        ok = manifest[manifest["status"].astype(str).str.lower() == "ok"]
+        indexed_docs = len(ok.drop_duplicates(subset=["doc_url"]))
+
+    st.markdown(
+        f"""
+        <div class="boi-topbar">
+            <div class="boi-brand">Bank of Israel Publications Explorer</div>
+            <div class="boi-nav">
+                <span>Catalog</span>
+                <span>Directives</span>
+                <span>Reader</span>
+                <span>Search</span>
+            </div>
+        </div>
+        <div class="boi-library-head">
+            <div>
+                <div class="boi-kicker">Library</div>
+                <h1 class="boi-page-title">Browse the Library</h1>
+                <div class="boi-language-toggle">
+                    <strong>English</strong><span>Hebrew source data</span>
+                </div>
+                <div class="boi-shelf">
+                    <div class="boi-shelf-item">
+                        <div class="boi-shelf-title">Catalog</div>
+                        <div class="boi-shelf-copy">
+                            Official Bank of Israel publication links,
+                            metadata, source pages, and extractable documents.
+                        </div>
+                        <div class="boi-shelf-count">{len(catalog):,} docs</div>
+                    </div>
+                    <div class="boi-shelf-item">
+                        <div class="boi-shelf-title">
+                            Proper Conduct of Banking Business Directives
+                        </div>
+                        <div class="boi-shelf-copy">
+                            Directive numbers, circular numbers, publication
+                            dates, English subjects, PDF previews, and source pages.
+                        </div>
+                        <div class="boi-shelf-count">{numbered:,} numbered</div>
+                    </div>
+                    <div class="boi-shelf-item">
+                        <div class="boi-shelf-title">Reader</div>
+                        <div class="boi-shelf-copy">
+                            Searchable PDFs with extracted text, highlighted
+                            matches, page navigation, and downloadable sources.
+                        </div>
+                        <div class="boi-shelf-count">{pdf_count:,} PDFs</div>
+                    </div>
+                </div>
+            </div>
+            <div>
+                <div class="boi-info-panel">
+                    <div class="boi-panel-title">A Living BOI Library</div>
+                    <div class="boi-panel-copy">
+                        A compact index for Bank of Israel publications,
+                        supervisory materials, and directive PDFs.
+                    </div>
+                </div>
+                <div class="boi-info-panel">
+                    <div class="boi-panel-title">Current Index</div>
+                    <div class="boi-panel-list">
+                        <div>{len(directives):,} proper conduct directives</div>
+                        <div>{indexed_docs:,} full-text PDFs indexed</div>
+                        <div>Latest directive update: {latest}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True)
+
+    sections = [
+        "Catalog",
+        "Proper Conduct of Banking Business Directives",
+        "Reader",
+    ]
+    selected = st.segmented_control(
+        "Library section",
+        sections,
+        default="Proper Conduct of Banking Business Directives",
+        key="library_section",
+        label_visibility="collapsed",
+        width="stretch")
+    st.markdown('<div class="boi-section-rule"></div>', unsafe_allow_html=True)
+    return selected or "Proper Conduct of Banking Business Directives"
+
+
+def render_section_heading(title):
+    st.markdown(
+        f'<h2 class="boi-section-title">{title}</h2>',
+        unsafe_allow_html=True)
+
+
+def render_catalog_section(catalog):
+    render_section_heading("Catalog")
+    query = st.text_input(
+        "Search title / URL",
+        "",
+        placeholder="annual report, inflation, monetary policy",
+        key="catalog_query")
+
+    filter_1, filter_2, filter_3 = st.columns(3)
+    sections = sorted(s for s in catalog["section"].unique() if s)
+    types = sorted(t for t in catalog["doc_type"].unique() if t)
+    only_dated = catalog[catalog["lastmod"] != ""]
+    years = (
+        sorted({d[:4] for d in only_dated["lastmod"] if len(d) >= 4})
+        if not only_dated.empty else [])
+    with filter_1:
         pick_sections = st.multiselect("Section", sections, default=[])
-        types = sorted(t for t in catalog["doc_type"].unique() if t)
+    with filter_2:
         pick_types = st.multiselect("File type", types, default=[])
-        only_dated = catalog[catalog["lastmod"] != ""]
-        if not only_dated.empty:
-            years = sorted({d[:4] for d in only_dated["lastmod"] if len(d) >= 4})
-            pick_years = st.multiselect("Year (lastmod)", years, default=[])
-        else:
-            pick_years = []
-        st.caption(f"Catalog: {len(catalog):,} documents")
+    with filter_3:
+        pick_years = st.multiselect("Year", years, default=[])
 
     view = catalog
     if query:
@@ -451,14 +750,13 @@ with tab_catalog:
     if pick_years:
         view = view[view["lastmod"].str[:4].isin(pick_years)]
 
-    st.markdown(f"**{len(view):,}** documents match. Tick the ones you want, "
-                "then extract their text below.")
+    st.markdown(f"**{len(view):,}** documents match.")
 
     display = view[["source_title", "doc_title", "doc_type", "lastmod",
                     "doc_url"]].copy()
     display.insert(0, "select", False)
     edited = st.data_editor(
-        display, hide_index=True, width="stretch", height=380,
+        display, hide_index=True, width="stretch", height=420,
         column_config={
             "select": st.column_config.CheckboxColumn("✓", width="small"),
             "source_title": "Publication",
@@ -473,10 +771,10 @@ with tab_catalog:
     chosen = edited[edited["select"]]["doc_url"].tolist()
     c1, c2 = st.columns([1, 3])
     with c1:
-        go = st.button(f"📄 Extract text ({len(chosen)})",
+        go = st.button(f"Extract text ({len(chosen)})",
                        type="primary", disabled=not chosen)
     with c2:
-        st.download_button("⬇️ Download filtered catalog (CSV)",
+        st.download_button("Download filtered catalog (CSV)",
                            view.to_csv(index=False).encode("utf-8"),
                            "boi_filtered_catalog.csv", "text/csv")
 
@@ -487,10 +785,10 @@ with tab_catalog:
                 pages, text = get_text(url)
                 title = (view.loc[view["doc_url"] == url, "source_title"].iloc[0]
                          or url.rsplit("/", 1)[-1])
-                with st.expander(f"📄 {title} — {pages} pages, "
+                with st.expander(f"{title} - {pages} pages, "
                                  f"{len(text):,} chars", expanded=(i == 1)):
                     st.caption(url)
-                    st.download_button("⬇️ Save text (.txt)", text.encode("utf-8"),
+                    st.download_button("Save text (.txt)", text.encode("utf-8"),
                                        slug_for(url) + ".txt", "text/plain",
                                        key="dl_" + slug_for(url))
                     st.text_area("Text", text, height=320,
@@ -501,11 +799,9 @@ with tab_catalog:
         prog.empty()
         st.success(f"Extracted {len(chosen)} document(s).")
 
-# --------------------------------------------------------------------------- #
-# Proper Conduct of Banking Business Directives tab
-# --------------------------------------------------------------------------- #
-with tab_proper_conduct:
-    directives = load_proper_conduct_directives()
+
+def render_proper_conduct_section(directives):
+    render_section_heading("Proper Conduct of Banking Business Directives")
 
     d1, d2, d3 = st.columns(3)
     d1.metric("Directives", f"{len(directives):,}")
@@ -518,109 +814,111 @@ with tab_proper_conduct:
 
     if directives.empty:
         st.info("No Proper Conduct of Banking Business Directives were found.")
+        return
+
+    directive_query = st.text_input(
+        "Search directives",
+        "",
+        placeholder="201, 301A, 2607, board of directors, Credit Risk",
+        key="proper_conduct_query")
+
+    directive_view = directives
+    if directive_query:
+        directive_view = filter_proper_conduct_directives(
+            directive_view, directive_query)
+
+    st.markdown(f"**{len(directive_view):,}** directives match.")
+    table = directive_view[[
+        "directive_number", "circular_number", "publication_date",
+        "title_display", "subject_display", "lastmod", "url"
+    ]].copy()
+    table["directive_link"] = (
+        table["url"].str.rstrip("/")
+        + "/#directive-"
+        + table["directive_number"])
+    table = table[[
+        "directive_link", "circular_number", "publication_date",
+        "title_display", "subject_display", "lastmod"
+    ]]
+    st.dataframe(
+        table,
+        hide_index=True,
+        width="stretch",
+        height=420,
+        column_config={
+            "directive_link": st.column_config.LinkColumn(
+                "Directive #",
+                width="small",
+                display_text=r"#directive-([^#]+)$"),
+            "circular_number": st.column_config.TextColumn(
+                "Circular #", width="small"),
+            "publication_date": st.column_config.TextColumn(
+                "Published", width="small"),
+            "title_display": "Title",
+            "subject_display": "Subject",
+            "lastmod": st.column_config.TextColumn("Updated", width="medium"),
+        })
+    export_cols = [
+        "directive_number", "circular_number", "publication_date",
+        "title_display", "subject_display", "subject", "area", "lastmod",
+        "url", "file_url",
+    ]
+    st.download_button(
+        "Download directives (CSV)",
+        directive_view[export_cols].to_csv(index=False).encode("utf-8"),
+        "proper_conduct_banking_business_directives.csv",
+        "text/csv")
+
+    if directive_view.empty:
+        return
+
+    def directive_preview_label(index):
+        row = directive_view.loc[index]
+        number = row["directive_number"]
+        title = row["title_display"] or row["title"]
+        return f"{number} - {title}" if number else title
+
+    selected_directive = st.selectbox(
+        "Preview directive",
+        directive_view.index.tolist(),
+        format_func=directive_preview_label,
+        key="proper_conduct_preview_directive")
+    selected = directive_view.loc[selected_directive]
+    st.markdown(
+        f"**{selected['directive_number']}** "
+        f"{selected['title_display']}")
+
+    page_col, pdf_col = st.columns(2)
+    with page_col:
+        st.link_button(
+            "Open directive page",
+            selected["url"],
+            width="stretch")
+    with pdf_col:
+        st.link_button(
+            "Open PDF",
+            selected["file_url"],
+            width="stretch")
+
+    if selected["file_url"]:
+        try:
+            model, directive_pdf = get_reader_model(
+                selected["file_url"],
+                selected["title_display"])
+            st.download_button(
+                "Download PDF",
+                directive_pdf,
+                slug_for(selected["file_url"]) + ".pdf",
+                "application/pdf")
+            render_pdf_viewer(model, height=720)
+        except Exception as e:
+            st.error(f"Unable to load PDF preview: {e}")
     else:
-        directive_query = st.text_input(
-            "Search directives",
-            "",
-            placeholder="201, 301A, 2607, board of directors",
-            key="proper_conduct_query")
+        st.info("No PDF file is available for this directive.")
 
-        directive_view = directives
-        if directive_query:
-            directive_view = filter_proper_conduct_directives(
-                directive_view, directive_query)
 
-        st.markdown(f"**{len(directive_view):,}** directives match.")
-        table = directive_view[[
-            "directive_number", "circular_number", "publication_date",
-            "title_display", "subject_display", "lastmod", "url"
-        ]].copy()
-        table["directive_link"] = (
-            table["url"].str.rstrip("/")
-            + "/#directive-"
-            + table["directive_number"])
-        table = table[[
-            "directive_link", "circular_number", "publication_date",
-            "title_display", "subject_display", "lastmod"
-        ]]
-        st.dataframe(
-            table,
-            hide_index=True,
-            width="stretch",
-            height=420,
-            column_config={
-                "directive_link": st.column_config.LinkColumn(
-                    "Directive #",
-                    width="small",
-                    display_text=r"#directive-([^#]+)$"),
-                "circular_number": st.column_config.TextColumn(
-                    "Circular #", width="small"),
-                "publication_date": st.column_config.TextColumn(
-                    "Published", width="small"),
-                "title_display": "Title",
-                "subject_display": "Subject",
-                "lastmod": st.column_config.TextColumn("Updated", width="medium"),
-            })
-        export_cols = [
-            "directive_number", "circular_number", "publication_date",
-            "title_display", "subject_display", "subject", "area", "lastmod",
-            "url", "file_url",
-        ]
-        st.download_button(
-            "Download directives (CSV)",
-            directive_view[export_cols].to_csv(index=False).encode("utf-8"),
-            "proper_conduct_banking_business_directives.csv",
-            "text/csv")
-
-        if not directive_view.empty:
-            def directive_preview_label(index):
-                row = directive_view.loc[index]
-                number = row["directive_number"]
-                title = row["title_display"] or row["title"]
-                return f"{number} - {title}" if number else title
-
-            selected_directive = st.selectbox(
-                "Preview directive",
-                directive_view.index.tolist(),
-                format_func=directive_preview_label,
-                key="proper_conduct_preview_directive")
-            selected = directive_view.loc[selected_directive]
-            st.markdown(
-                f"**{selected['directive_number']}** "
-                f"{selected['title_display']}")
-
-            page_col, pdf_col = st.columns(2)
-            with page_col:
-                st.link_button(
-                    "Open directive page",
-                    selected["url"],
-                    width="stretch")
-            with pdf_col:
-                st.link_button(
-                    "Open PDF",
-                    selected["file_url"],
-                    width="stretch")
-
-            if selected["file_url"]:
-                try:
-                    model, directive_pdf = get_reader_model(
-                        selected["file_url"],
-                        selected["title_display"])
-                    st.download_button(
-                        "Download PDF",
-                        directive_pdf,
-                        slug_for(selected["file_url"]) + ".pdf",
-                        "application/pdf")
-                    render_pdf_viewer(model, height=720)
-                except Exception as e:
-                    st.error(f"Unable to load PDF preview: {e}")
-            else:
-                st.info("No PDF file is available for this directive.")
-
-# --------------------------------------------------------------------------- #
-# Reader tab
-# --------------------------------------------------------------------------- #
-with tab_reader:
+def render_reader_section(catalog):
+    render_section_heading("Reader")
     pdf_catalog = catalog[catalog["doc_type"].str.lower() == "pdf"].copy()
     pdf_catalog = pdf_catalog.drop_duplicates(subset=["doc_url"]).reset_index(drop=True)
     reader_docs = load_search_docs(search_corpus_signature())
@@ -667,43 +965,64 @@ with tab_reader:
 
     if reader_view.empty:
         st.info("No PDFs match.")
-    else:
-        pick_col, action_col = st.columns([4, 1])
-        with pick_col:
-            selected_pdf = st.selectbox(
-                "Publication",
-                reader_view.index.tolist(),
-                format_func=reader_label,
-                key="reader_selected_pdf")
-        selected_row = reader_view.loc[selected_pdf]
-        selected_title = selected_row["source_title"] or selected_row["doc_title"]
-        selected_url = selected_row["doc_url"]
+        return
 
-        with action_col:
-            open_reader = st.button("Open reader", type="primary", width="stretch")
+    pick_col, action_col = st.columns([4, 1])
+    with pick_col:
+        selected_pdf = st.selectbox(
+            "Publication",
+            reader_view.index.tolist(),
+            format_func=reader_label,
+            key="reader_selected_pdf")
+    selected_row = reader_view.loc[selected_pdf]
+    selected_title = selected_row["source_title"] or selected_row["doc_title"]
+    selected_url = selected_row["doc_url"]
 
-        if open_reader:
-            st.session_state.reader_url = selected_url
-            st.session_state.reader_title = selected_title
-            st.session_state.reader_initial_query = reader_query.strip()
+    with action_col:
+        open_reader = st.button("Open reader", type="primary", width="stretch")
 
-        if "reader_url" in st.session_state:
-            model, pdf_bytes = get_reader_model(
-                st.session_state.reader_url,
-                st.session_state.reader_title)
+    if open_reader:
+        st.session_state.reader_url = selected_url
+        st.session_state.reader_title = selected_title
+        st.session_state.reader_initial_query = reader_query.strip()
 
-            m1, m2, m3 = st.columns(3)
-            m1.metric("Pages", f"{model['pageCount']:,}")
-            m2.metric("PDF size", f"{len(pdf_bytes) / 1024 / 1024:.1f} MB")
-            words = sum(len(page["words"]) for page in model["pages"])
-            m3.metric("Indexed words", f"{words:,}")
+    if "reader_url" in st.session_state:
+        model, pdf_bytes = get_reader_model(
+            st.session_state.reader_url,
+            st.session_state.reader_title)
 
-            st.download_button(
-                "Download PDF",
-                pdf_bytes,
-                slug_for(st.session_state.reader_url) + ".pdf",
-                "application/pdf")
-            viewer_model = dict(model)
-            viewer_model["initialQuery"] = st.session_state.get(
-                "reader_initial_query", "")
-            render_pdf_viewer(viewer_model)
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Pages", f"{model['pageCount']:,}")
+        m2.metric("PDF size", f"{len(pdf_bytes) / 1024 / 1024:.1f} MB")
+        words = sum(len(page["words"]) for page in model["pages"])
+        m3.metric("Indexed words", f"{words:,}")
+
+        st.download_button(
+            "Download PDF",
+            pdf_bytes,
+            slug_for(st.session_state.reader_url) + ".pdf",
+            "application/pdf")
+        viewer_model = dict(model)
+        viewer_model["initialQuery"] = st.session_state.get(
+            "reader_initial_query", "")
+        render_pdf_viewer(viewer_model)
+
+
+apply_library_styles()
+
+if not os.path.exists(LINKS):
+    st.warning(
+        "No catalog yet. Run **`python3 boi_pdf_extractor.py`** first to build "
+        "`boi_pdf_links.csv`, then reload this page.")
+    st.stop()
+
+catalog = load_catalog(file_mtime(LINKS))
+directives = load_proper_conduct_directives()
+section = render_library_shell(catalog, directives)
+
+if section == "Catalog":
+    render_catalog_section(catalog)
+elif section == "Reader":
+    render_reader_section(catalog)
+else:
+    render_proper_conduct_section(directives)
