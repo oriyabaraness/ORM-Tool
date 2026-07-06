@@ -278,6 +278,49 @@ def extract_directive_number(*parts):
     return ""
 
 
+SUBJECT_TRANSLATIONS = {
+    "Interest rate risk": "Interest Rate Risk",
+    "איסור הלבנת הון": "Anti-Money Laundering",
+    "אמצעי תשלום": "Means of Payment",
+    "בנקים חדשים": "New Banks",
+    "הלוואות וחובות": "Loans and Debts",
+    "הלוואות לדיור": "Housing Loans",
+    "הלימות ההון ומינוף": "Capital Adequacy and Leverage",
+    "חלוקה (דיבידנד ורכישה)": "Distribution (Dividend and Buyback)",
+    "חשבונות בנק": "Bank Accounts",
+    "חשבונות ללא תנועה": "Dormant Accounts",
+    "מיקור חוץ": "Outsourcing",
+    "ממשל תאגידי": "Corporate Governance",
+    "נזילות": "Liquidity",
+    "ניהול ובקרה": "Management and Control",
+    "ניהול סיכונים": "Risk Management",
+    "ניירות ערך": "Securities",
+    "סיכון אשראי": "Credit Risk",
+    "סיכון תפעולי": "Operational Risk",
+    "סיכוני טכנולוגיית המידע, אבטחת מידע והגנת סייבר": (
+        "Information Technology Risk, Information Security and Cyber Defense"),
+    "סיכוני שוק": "Market Risk",
+    "סיכונים סביבתיים": "Environmental Risks",
+    "עמלות": "Fees",
+    "ערבויות": "Guarantees",
+    "פעילויות שוק ההון": "Capital Market Activities",
+    "פתיחת סניפים והצבת ATM": "Opening Branches and Placing ATMs",
+    "רואה החשבון המבקר": "External Auditor",
+    "ריבית": "Interest",
+    "שיקים ללא כיסוי": "Checks Without Cover",
+    "שליטה והחזקה": "Control and Holdings",
+    "תאגידים בנקאיים ייחודיים ותאגידים אחרים": (
+        "Special Banking Corporations and Other Entities"),
+}
+
+
+def translate_subject(subject):
+    subject = str(subject or "").strip()
+    if not subject:
+        return ""
+    return SUBJECT_TRANSLATIONS.get(subject, subject)
+
+
 def prepare_proper_conduct_directives(df):
     required = (
         "title", "url", "lastmod", "publication_date", "directive_number",
@@ -296,6 +339,8 @@ def prepare_proper_conduct_directives(df):
     title = directives["page_title"].where(
         directives["page_title"].str.len() > 0, directives["title"])
     directives["title_display"] = title.str.replace(r"\s+", " ", regex=True)
+    directives["subject_display"] = directives["subject"].apply(
+        translate_subject)
     missing_numbers = directives["directive_number"].str.len() == 0
     directives.loc[missing_numbers, "directive_number"] = directives[
         missing_numbers].apply(
@@ -335,8 +380,8 @@ def filter_proper_conduct_directives(directives, query):
 
     search_cols = [
         "directive_number", "circular_number", "title_display",
-        "title", "page_title", "publication_date", "subject", "area",
-        "url", "file_url",
+        "title", "page_title", "publication_date", "subject",
+        "subject_display", "area", "url", "file_url",
     ]
     hay = directives[search_cols].fillna("").agg(" ".join, axis=1).str.lower()
     mask = pd.Series(True, index=directives.index)
@@ -488,7 +533,7 @@ with tab_proper_conduct:
         st.markdown(f"**{len(directive_view):,}** directives match.")
         table = directive_view[[
             "directive_number", "circular_number", "publication_date",
-            "title_display", "subject", "lastmod", "url"
+            "title_display", "subject_display", "lastmod", "url"
         ]].copy()
         table["directive_link"] = (
             table["url"].str.rstrip("/")
@@ -496,7 +541,7 @@ with tab_proper_conduct:
             + table["directive_number"])
         table = table[[
             "directive_link", "circular_number", "publication_date",
-            "title_display", "subject", "lastmod"
+            "title_display", "subject_display", "lastmod"
         ]]
         st.dataframe(
             table,
@@ -513,12 +558,13 @@ with tab_proper_conduct:
                 "publication_date": st.column_config.TextColumn(
                     "Published", width="small"),
                 "title_display": "Title",
-                "subject": "Subject",
+                "subject_display": "Subject",
                 "lastmod": st.column_config.TextColumn("Updated", width="medium"),
             })
         export_cols = [
             "directive_number", "circular_number", "publication_date",
-            "title_display", "subject", "area", "lastmod", "url", "file_url",
+            "title_display", "subject_display", "subject", "area", "lastmod",
+            "url", "file_url",
         ]
         st.download_button(
             "Download directives (CSV)",
