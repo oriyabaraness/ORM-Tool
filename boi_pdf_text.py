@@ -8,8 +8,10 @@ Input : boi_pdf_links.csv  (produced by boi_pdf_extractor.py) -- the catalog of
 Output: boi_texts/<slug>.txt.gz   one gzip-compressed text file per PDF
                                  (read with: python3 -c "import gzip,sys;
                                   print(gzip.open(sys.argv[1],'rt').read())" FILE)
-        boi_pdf_text_manifest.csv  one row per document (url, title, pages,
-                                   chars, txt_path, status)
+        boi_pdf_text_manifest.local.csv
+                                 local rows for newly indexed PDFs (url, title,
+                                 pages, chars, txt_path, status). The checked-in
+                                 seed manifest is also read for resume support.
 
 The /media/*.pdf files download directly (no Radware challenge), so this uses
 plain requests. Resumable: PDFs already extracted (status ok in the manifest,
@@ -37,8 +39,11 @@ import requests
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 LINKS = os.path.join(HERE, "boi_pdf_links.csv")
+PROPER_CONDUCT_DIRECTIVES = os.path.join(HERE, "boi_proper_conduct_directives.csv")
 TEXT_DIR = os.path.join(HERE, "boi_texts")
-MANIFEST = os.path.join(HERE, "boi_pdf_text_manifest.csv")
+BASE_MANIFEST = os.path.join(HERE, "boi_pdf_text_manifest.csv")
+LOCAL_MANIFEST = os.path.join(HERE, "boi_pdf_text_manifest.local.csv")
+MANIFEST = os.environ.get("BOI_PDF_TEXT_MANIFEST", LOCAL_MANIFEST)
 
 HEADERS = {"User-Agent": ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
                           "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -55,12 +60,16 @@ def slug_for(url):
 
 def load_manifest_done():
     """URLs already extracted successfully and whose .txt still exists."""
-    if not os.path.exists(MANIFEST):
+    frames = []
+    for path in (BASE_MANIFEST, MANIFEST):
+        if os.path.exists(path):
+            try:
+                frames.append(pd.read_csv(path))
+            except Exception:
+                pass
+    if not frames:
         return set()
-    try:
-        m = pd.read_csv(MANIFEST)
-    except Exception:
-        return set()
+    m = pd.concat(frames, ignore_index=True)
     done = set()
     for _, r in m.iterrows():
         if str(r.get("status")) == "ok":
@@ -72,7 +81,31 @@ def load_manifest_done():
 
 def select(args):
     df = pd.read_csv(LINKS)
-    df = df[df["doc_type"].str.lower() == "pdf"].copy()
+    df = df[df["doc_type"].astype(str).str.strip().str.lower() == "pdf"].copy()
+
+    if os.path.exists(PROPER_CONDUCT_DIRECTIVES):
+        directives = pd.read_csv(PROPER_CONDUCT_DIRECTIVES, dtype=str).fillna("")
+        if "file_url" in directives.columns:
+            title = directives.get("page_title", directives.get("title", ""))
+            title = title.where(title.astype(str).str.len() > 0,
+                                directives.get("title", ""))
+            number = directives.get("directive_number", "").astype(str)
+            directive_rows = pd.DataFrame({
+                "source_page": directives.get("url", ""),
+                "source_title": (
+                    "Proper Conduct Directive "
+                    + number
+                    + " - "
+                    + title.astype(str)),
+                "section": "proper-conduct",
+                "lastmod": directives.get("lastmod", ""),
+                "doc_title": "Directive PDF",
+                "doc_url": directives["file_url"],
+                "doc_type": "pdf",
+            })
+            directive_rows = directive_rows[
+                directive_rows["doc_url"].astype(str).str.len() > 0]
+            df = pd.concat([df, directive_rows], ignore_index=True)
 
     if args.urls:
         with open(args.urls, encoding="utf-8") as f:

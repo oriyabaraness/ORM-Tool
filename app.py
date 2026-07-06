@@ -11,6 +11,10 @@ Text extraction reuses boi_pdf_text.extract_one, and results are cached per URL.
 import gzip
 import os
 import re
+import signal
+import subprocess
+import sys
+import time
 
 import pandas as pd
 import streamlit as st
@@ -25,7 +29,10 @@ PUBLICATIONS_INDEX = os.path.join(HERE, "boi_publications_index.csv")
 PROPER_CONDUCT_DIRECTIVES = os.path.join(
     HERE, "boi_proper_conduct_directives.csv")
 MANIFEST = os.path.join(HERE, "boi_pdf_text_manifest.csv")
+LOCAL_MANIFEST = os.path.join(HERE, "boi_pdf_text_manifest.local.csv")
 TEXT_DIR = os.path.join(HERE, "boi_texts")
+INDEX_LOG = os.path.join(HERE, "boi_pdf_text_index.log")
+INDEX_PID = os.path.join(HERE, "boi_pdf_text_index.pid")
 
 st.set_page_config(page_title="BOI Publications Explorer",
                    page_icon="🏦", layout="wide")
@@ -68,10 +75,14 @@ def load_proper_conduct_metadata(mtime):
 
 
 @st.cache_data(show_spinner=False)
-def load_text_manifest(mtime):
-    if not os.path.exists(MANIFEST):
+def load_text_manifest(signature):
+    frames = []
+    for path in (MANIFEST, LOCAL_MANIFEST):
+        if os.path.exists(path):
+            frames.append(pd.read_csv(path))
+    if not frames:
         return pd.DataFrame()
-    df = pd.read_csv(MANIFEST)
+    df = pd.concat(frames, ignore_index=True)
     for c in ("doc_url", "doc_title", "source_title", "section", "lastmod",
               "txt_path", "status"):
         if c in df.columns:
@@ -81,7 +92,8 @@ def load_text_manifest(mtime):
 
 @st.cache_data(show_spinner=False)
 def load_search_docs(signature):
-    manifest = load_text_manifest(file_mtime(MANIFEST))
+    manifest = load_text_manifest(
+        (file_mtime(MANIFEST), file_mtime(LOCAL_MANIFEST)))
     if manifest.empty:
         return pd.DataFrame()
 
@@ -129,16 +141,123 @@ def file_mtime(path):
     return os.path.getmtime(path) if os.path.exists(path) else 0
 
 
+def get_pdf_catalog(catalog, directives=None):
+    doc_type = catalog["doc_type"].fillna("").astype(str).str.strip().str.lower()
+    pdf_catalog = catalog[doc_type == "pdf"].copy()
+
+    if directives is not None and not directives.empty:
+        directive_rows = pd.DataFrame({
+            "source_page": directives["url"].fillna(""),
+            "source_title": (
+                "Proper Conduct Directive "
+                + directives["directive_number"].fillna("").astype(str)
+                + " - "
+                + directives["title_display"].fillna("").astype(str)),
+            "section": "proper-conduct",
+            "lastmod": directives["lastmod"].fillna(""),
+            "doc_title": "Directive PDF",
+            "doc_url": directives["file_url"].fillna(""),
+            "doc_type": "pdf",
+        })
+        directive_rows = directive_rows[
+            directive_rows["doc_url"].astype(str).str.len() > 0]
+        pdf_catalog = pd.concat([pdf_catalog, directive_rows], ignore_index=True)
+
+    return pdf_catalog.drop_duplicates(
+        subset=["doc_url"]).reset_index(drop=True)
+
+
+def read_index_pid():
+    if not os.path.exists(INDEX_PID):
+        return None
+    try:
+        with open(INDEX_PID, encoding="utf-8") as fh:
+            return int(fh.read().strip())
+    except (OSError, ValueError):
+        return None
+
+
+def process_is_running(pid):
+    if not pid:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+
+
+def pdf_index_process():
+    pid = read_index_pid()
+    running = process_is_running(pid)
+    if pid and not running:
+        try:
+            os.remove(INDEX_PID)
+        except OSError:
+            pass
+    return pid if running else None
+
+
+def start_pdf_text_index():
+    running_pid = pdf_index_process()
+    if running_pid:
+        return running_pid
+
+    os.makedirs(TEXT_DIR, exist_ok=True)
+    with open(INDEX_LOG, "a", encoding="utf-8") as log:
+        log.write(f"\n\n== started {time.strftime('%Y-%m-%d %H:%M:%S')} ==\n")
+        log.flush()
+        proc = subprocess.Popen(
+            [sys.executable, "boi_pdf_text.py"],
+            cwd=HERE,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            start_new_session=True)
+
+    with open(INDEX_PID, "w", encoding="utf-8") as fh:
+        fh.write(str(proc.pid))
+    return proc.pid
+
+
+def stop_pdf_text_index():
+    pid = pdf_index_process()
+    if not pid:
+        return False
+    try:
+        os.killpg(pid, signal.SIGTERM)
+    except OSError:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            return False
+    return True
+
+
+def read_index_log_tail(chars=5000):
+    if not os.path.exists(INDEX_LOG):
+        return ""
+    try:
+        with open(INDEX_LOG, "rb") as fh:
+            fh.seek(0, os.SEEK_END)
+            size = fh.tell()
+            fh.seek(max(0, size - chars))
+            return fh.read().decode("utf-8", errors="replace")
+    except OSError:
+        return ""
+
+
 def search_corpus_signature():
     if not os.path.isdir(TEXT_DIR):
-        return (file_mtime(MANIFEST),)
+        return (file_mtime(MANIFEST), file_mtime(LOCAL_MANIFEST))
     files = []
     for name in sorted(os.listdir(TEXT_DIR)):
         if not name.endswith(".txt.gz"):
             continue
         path = os.path.join(TEXT_DIR, name)
         files.append((name, os.path.getmtime(path), os.path.getsize(path)))
-    return (file_mtime(MANIFEST), tuple(files))
+    return (file_mtime(MANIFEST), file_mtime(LOCAL_MANIFEST), tuple(files))
 
 
 def parse_terms(query):
@@ -258,6 +377,51 @@ def build_reader_results(pdf_catalog, docs, query, limit=200):
     return result.sort_values(
         ["full_text_matches", "metadata_matches", "lastmod", "source_title"],
         ascending=[False, False, False, True],
+    ).head(limit)
+
+
+def build_full_text_pdf_results(pdf_catalog, docs, query, match_mode, limit=500):
+    query = query.strip()
+    if not query:
+        result = pdf_catalog.copy()
+        result["full_text_matches"] = 0
+        result["matched_terms"] = ""
+        result["search_snippet"] = ""
+        return result
+
+    terms = parse_terms(query)
+    if not terms or docs.empty:
+        return pd.DataFrame()
+
+    results = search_full_text(docs, terms, match_mode, limit)
+    if results.empty:
+        return results
+
+    metadata = pdf_catalog.drop_duplicates(subset=["doc_url"]).set_index("doc_url")
+
+    def fill_from_catalog(col):
+        if col not in metadata.columns:
+            return
+        mapped = results["doc_url"].map(metadata[col]).fillna("")
+        if col in results.columns:
+            current = results[col].fillna("").astype(str)
+            results[col] = current.where(current.str.len() > 0, mapped)
+        else:
+            results[col] = mapped
+
+    for col in ("source_title", "doc_title", "section", "lastmod", "doc_type"):
+        fill_from_catalog(col)
+
+    if "doc_type" not in results.columns:
+        results["doc_type"] = "pdf"
+    if "pages" in results.columns:
+        results["pages"] = pd.to_numeric(results["pages"], errors="coerce")
+    results["full_text_matches"] = results["matches"].fillna(0).astype(int)
+    results["search_snippet"] = results["snippet"].fillna("")
+    results["search_source"] = "Full text"
+    return results.sort_values(
+        ["full_text_matches", "lastmod", "source_title"],
+        ascending=[False, False, True],
     ).head(limit)
 
 
@@ -612,14 +776,13 @@ def apply_library_styles():
 
 
 def render_library_shell(catalog, directives):
-    pdf_count = (
-        int(catalog["doc_type"].str.lower().eq("pdf").sum())
-        if "doc_type" in catalog.columns else 0)
+    pdf_count = len(get_pdf_catalog(catalog, directives))
     numbered = (
         int(directives["directive_number"].str.len().gt(0).sum())
         if not directives.empty else 0)
     latest = directives["lastmod"].max()[:10] if not directives.empty else "n/a"
-    manifest = load_text_manifest(file_mtime(MANIFEST))
+    manifest = load_text_manifest(
+        (file_mtime(MANIFEST), file_mtime(LOCAL_MANIFEST)))
     indexed_docs = 0
     if not manifest.empty:
         ok = manifest[manifest["status"].astype(str).str.lower() == "ok"]
@@ -917,36 +1080,74 @@ def render_proper_conduct_section(directives):
         st.info("No PDF file is available for this directive.")
 
 
-def render_reader_section(catalog):
-    render_section_heading("Search All Publications")
-    pdf_catalog = catalog[catalog["doc_type"].str.lower() == "pdf"].copy()
-    pdf_catalog = pdf_catalog.drop_duplicates(subset=["doc_url"]).reset_index(drop=True)
+def render_reader_section(catalog, directives):
+    render_section_heading("Search Inside All PDFs")
+    pdf_catalog = get_pdf_catalog(catalog, directives)
     reader_docs = load_search_docs(search_corpus_signature())
+    indexed_urls = (
+        set(reader_docs["doc_url"]) if not reader_docs.empty else set())
+    remaining = max(0, len(pdf_catalog) - len(indexed_urls))
+    running_pid = pdf_index_process()
+
+    i1, i2, i3, i4 = st.columns(4)
+    i1.metric("PDF files", f"{len(pdf_catalog):,}")
+    i2.metric("Full-text indexed", f"{len(indexed_urls):,}")
+    i3.metric("Remaining", f"{remaining:,}")
+    i4.metric("Indexer", "Running" if running_pid else "Idle")
+
+    index_col, stop_col = st.columns([1, 1])
+    with index_col:
+        if st.button(
+                "Index remaining PDFs",
+                type="primary",
+                disabled=running_pid is not None or remaining == 0,
+                width="stretch"):
+            pid = start_pdf_text_index()
+            st.success(f"Full-text indexing started. PID {pid}.")
+    with stop_col:
+        if st.button(
+                "Stop indexing",
+                disabled=running_pid is None,
+                width="stretch"):
+            if stop_pdf_text_index():
+                st.warning("Full-text indexing stop requested.")
+            else:
+                st.info("No indexing process is running.")
+
+    log_tail = read_index_log_tail()
+    if log_tail:
+        with st.expander("Index log", expanded=False):
+            st.text(log_tail)
 
     reader_query = st.text_input(
-        "Search all publications",
+        "Search inside indexed PDF text",
         "",
         placeholder='stock, inflation, "monetary policy"',
         key="reader_query")
-    if reader_query.strip():
-        reader_view = build_reader_results(catalog, reader_docs, reader_query, limit=500)
-    else:
-        reader_view = pdf_catalog.copy()
+    match_mode = st.segmented_control(
+        "Match terms",
+        ["Any term", "All terms"],
+        default="Any term",
+        key="reader_match_mode",
+        width="content")
+    reader_view = build_full_text_pdf_results(
+        pdf_catalog, reader_docs, reader_query, match_mode or "Any term")
 
     if reader_query.strip():
         total_hits = (
             int(reader_view["full_text_matches"].sum())
             if "full_text_matches" in reader_view.columns else 0)
         metric_1, metric_2, metric_3 = st.columns(3)
-        metric_1.metric("Matching publications", f"{len(reader_view):,}")
+        metric_1.metric("Matching PDFs", f"{len(reader_view):,}")
         metric_2.metric("Full-text hits", f"{total_hits:,}")
         metric_3.metric("Indexed PDFs searched", f"{len(reader_docs):,}")
         st.caption(
-            f"Search covers all {len(catalog):,} catalog records by metadata "
-            f"and the full text of {len(reader_docs):,} indexed PDFs.")
+            f"Search is looking inside the text of {len(reader_docs):,} indexed "
+            f"PDFs. Index the remaining {remaining:,} PDFs to cover the full "
+            f"{len(pdf_catalog):,}-PDF catalog.")
         if not reader_view.empty:
             preview = reader_view[[
-                "source_title", "doc_title", "doc_type", "lastmod",
+                "source_title", "doc_title", "section", "pages", "lastmod",
                 "full_text_matches", "matched_terms", "search_snippet",
                 "doc_url"
             ]].copy()
@@ -958,7 +1159,8 @@ def render_reader_section(catalog):
                 column_config={
                     "source_title": "Publication",
                     "doc_title": "Link text",
-                    "doc_type": st.column_config.TextColumn("Type", width="small"),
+                    "section": "Section",
+                    "pages": st.column_config.NumberColumn("Pages", width="small"),
                     "lastmod": st.column_config.TextColumn("Updated", width="medium"),
                     "full_text_matches": st.column_config.NumberColumn(
                         "Text hits", width="small"),
@@ -981,20 +1183,14 @@ def render_reader_section(catalog):
         return f"{title}{hit_label} - {date}" if date else f"{title}{hit_label}"
 
     if reader_view.empty:
-        st.info("No publications match.")
-        return
-
-    openable_view = reader_view[
-        reader_view["doc_type"].astype(str).str.lower().eq("pdf")].copy()
-    if openable_view.empty:
-        st.info("No matching PDFs can be opened in the reader. Use the URL column above for non-PDF results.")
+        st.info("No PDF text matches.")
         return
 
     pick_col, action_col = st.columns([4, 1])
     with pick_col:
         selected_pdf = st.selectbox(
             "Open a matching PDF",
-            openable_view.index.tolist(),
+            reader_view.index.tolist(),
             format_func=reader_label,
             key="reader_selected_pdf")
     selected_row = reader_view.loc[selected_pdf]
@@ -1046,6 +1242,6 @@ section = render_library_shell(catalog, directives)
 if section == "Catalog":
     render_catalog_section(catalog)
 elif section == "Reader":
-    render_reader_section(catalog)
+    render_reader_section(catalog, directives)
 else:
     render_proper_conduct_section(directives)
