@@ -556,10 +556,18 @@ with tab_proper_conduct:
                     width="stretch")
 
             if selected["file_url"]:
-                st.iframe(
-                    selected["file_url"],
-                    height=720,
-                    width="stretch")
+                try:
+                    model, directive_pdf = get_reader_model(
+                        selected["file_url"],
+                        selected["title_display"])
+                    st.download_button(
+                        "Download PDF",
+                        directive_pdf,
+                        slug_for(selected["file_url"]) + ".pdf",
+                        "application/pdf")
+                    render_pdf_viewer(model, height=720)
+                except Exception as e:
+                    st.error(f"Unable to load PDF preview: {e}")
             else:
                 st.info("No PDF file is available for this directive.")
 
