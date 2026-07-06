@@ -5,8 +5,6 @@ pipeline.
   Catalog tab : search & filter the document catalog (boi_pdf_links.csv), pick
                 publications, extract their text on the spot, read it, and
                 download the text or the source PDF.
-  Overview tab: counts and a peek at the page index (boi_publications_index.csv).
-
 Run with:  streamlit run app.py   (from inside the .venv)
 
 Text extraction reuses boi_pdf_text.extract_one, and results are cached per URL.
@@ -23,7 +21,6 @@ from boi_pdf_text import extract_one, slug_for
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 LINKS = os.path.join(HERE, "boi_pdf_links.csv")
-INDEX = os.path.join(HERE, "boi_publications_index.csv")
 MANIFEST = os.path.join(HERE, "boi_pdf_text_manifest.csv")
 TEXT_DIR = os.path.join(HERE, "boi_texts")
 
@@ -38,11 +35,6 @@ def load_catalog(mtime):  # mtime busts the cache when the file changes
         if c in df.columns:
             df[c] = df[c].fillna("")
     return df.drop_duplicates(subset=["doc_url"])
-
-
-@st.cache_data(show_spinner=False)
-def load_index(mtime):
-    return pd.read_csv(INDEX)
 
 
 @st.cache_data(show_spinner=False)
@@ -248,8 +240,8 @@ if not os.path.exists(LINKS):
     st.stop()
 
 catalog = load_catalog(file_mtime(LINKS))
-tab_catalog, tab_search, tab_reader, tab_overview = st.tabs(
-    ["📚 Catalog", "🔎 Full Text", "Reader", "📊 Overview"])
+tab_catalog, tab_search, tab_reader = st.tabs(
+    ["📚 Catalog", "🔎 Full Text", "Reader"])
 
 # --------------------------------------------------------------------------- #
 # Catalog tab
@@ -504,24 +496,3 @@ with tab_reader:
             viewer_model["initialQuery"] = st.session_state.get(
                 "reader_initial_query", "")
             render_pdf_viewer(viewer_model)
-
-# --------------------------------------------------------------------------- #
-# Overview tab
-# --------------------------------------------------------------------------- #
-with tab_overview:
-    a, b, c = st.columns(3)
-    a.metric("Documents in catalog", f"{len(catalog):,}")
-    b.metric("PDFs", f"{(catalog['doc_type'] == 'pdf').sum():,}")
-    c.metric("Sections", catalog["section"].nunique())
-
-    st.subheader("Documents by section")
-    st.bar_chart(catalog["section"].value_counts())
-
-    st.subheader("Documents by file type")
-    st.bar_chart(catalog["doc_type"].value_counts())
-
-    if os.path.exists(INDEX):
-        idx = load_index(file_mtime(INDEX))
-        st.subheader("Page index (sitemap-derived)")
-        st.caption(f"{len(idx):,} publication pages known from the sitemap.")
-        st.dataframe(idx.head(200), hide_index=True, width="stretch")
