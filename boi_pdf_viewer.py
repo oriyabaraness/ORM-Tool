@@ -936,8 +936,13 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
   searchInput.addEventListener("input", runSearch);
 
   renderPages();
-  renderResults();
-  setActivePage(1);
+  if (payload.initialQuery) {{
+    searchInput.value = payload.initialQuery;
+    runSearch();
+  }} else {{
+    renderResults();
+    setActivePage(1);
+  }}
   bindScrollSync(pdfPane, textPane);
   bindScrollSync(textPane, pdfPane);
 }})();

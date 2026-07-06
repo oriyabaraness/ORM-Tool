@@ -122,7 +122,7 @@ def search_corpus_signature():
 def parse_terms(query):
     terms = []
     for quoted, bare in re.findall(r'"([^"]+)"|(\S+)', query):
-        term = (quoted or bare).strip().lower()
+        term = (quoted or bare).strip().strip(",;:").lower()
         if term and term not in terms:
             terms.append(term)
     return terms
@@ -188,6 +188,54 @@ def search_full_text(docs, terms, match_mode, limit):
     return results.sort_values(
         ["matches", "lastmod", "source_title"],
         ascending=[False, False, True],
+    ).head(limit)
+
+
+def build_reader_results(pdf_catalog, docs, query, limit=200):
+    view = pdf_catalog.copy()
+    view["metadata_matches"] = 0
+    view["full_text_matches"] = 0
+    view["matched_terms"] = ""
+    view["search_snippet"] = ""
+    view["search_source"] = "Catalog"
+
+    query = query.strip()
+    if not query:
+        return view
+
+    terms = parse_terms(query)
+    if not terms:
+        return view.iloc[0:0].copy()
+
+    hay = (view["source_title"] + " " + view["doc_title"] + " "
+           + view["doc_url"]).str.lower()
+    metadata_scores = hay.apply(
+        lambda text: sum(text.count(term) for term in terms)
+        + (1 if query.lower() in text else 0))
+
+    full_text_results = pd.DataFrame()
+    if not docs.empty:
+        full_text_results = search_full_text(docs, terms, "Any term", limit)
+
+    metadata_urls = set(view.loc[metadata_scores > 0, "doc_url"])
+    full_text_urls = set(full_text_results["doc_url"]) if not full_text_results.empty else set()
+    matched_urls = metadata_urls | full_text_urls
+    result = view[view["doc_url"].isin(matched_urls)].copy()
+    if result.empty:
+        return result
+
+    result["metadata_matches"] = metadata_scores.loc[result.index].astype(int)
+    if not full_text_results.empty:
+        indexed = full_text_results.set_index("doc_url")
+        result["full_text_matches"] = (
+            result["doc_url"].map(indexed["matches"]).fillna(0).astype(int))
+        result["matched_terms"] = result["doc_url"].map(indexed["matched_terms"]).fillna("")
+        result["search_snippet"] = result["doc_url"].map(indexed["snippet"]).fillna("")
+    result["search_source"] = result["full_text_matches"].apply(
+        lambda hits: "Full text" if hits else "Catalog")
+    return result.sort_values(
+        ["full_text_matches", "metadata_matches", "lastmod", "source_title"],
+        ascending=[False, False, False, True],
     ).head(limit)
 
 
@@ -372,24 +420,47 @@ with tab_search:
 with tab_reader:
     pdf_catalog = catalog[catalog["doc_type"].str.lower() == "pdf"].copy()
     pdf_catalog = pdf_catalog.drop_duplicates(subset=["doc_url"]).reset_index(drop=True)
+    reader_docs = load_search_docs(search_corpus_signature())
 
     reader_query = st.text_input(
         "Find PDF",
         "",
-        placeholder="annual report, inflation, monetary policy",
+        placeholder='Search all PDFs: stock, inflation, "monetary policy"',
         key="reader_query")
-    reader_view = pdf_catalog
-    if reader_query:
-        q = reader_query.lower()
-        hay = (reader_view["source_title"] + " " + reader_view["doc_title"] + " "
-               + reader_view["doc_url"]).str.lower()
-        reader_view = reader_view[hay.str.contains(q, regex=False)]
+    reader_view = build_reader_results(pdf_catalog, reader_docs, reader_query)
+
+    if reader_query.strip():
+        st.caption(
+            f"{len(reader_view):,} PDFs match across catalog metadata and "
+            f"{len(reader_docs):,} extracted full-text PDFs.")
+        if not reader_view.empty:
+            preview = reader_view[[
+                "source_title", "doc_title", "lastmod", "full_text_matches",
+                "matched_terms", "search_snippet", "doc_url"
+            ]].head(12).copy()
+            st.dataframe(
+                preview,
+                hide_index=True,
+                width="stretch",
+                height=230,
+                column_config={
+                    "source_title": "Publication",
+                    "doc_title": "Link text",
+                    "lastmod": st.column_config.TextColumn("Updated", width="medium"),
+                    "full_text_matches": st.column_config.NumberColumn(
+                        "Text hits", width="small"),
+                    "matched_terms": "Terms",
+                    "search_snippet": "Snippet",
+                    "doc_url": st.column_config.LinkColumn("URL"),
+                })
 
     def reader_label(index):
         row = reader_view.loc[index]
         title = row["source_title"] or row["doc_title"] or row["doc_url"].rsplit("/", 1)[-1]
         date = str(row.get("lastmod", ""))[:10]
-        return f"{title} - {date}" if date else title
+        hits = int(row.get("full_text_matches", 0) or 0)
+        hit_label = f" ({hits:,} text hits)" if hits else ""
+        return f"{title}{hit_label} - {date}" if date else f"{title}{hit_label}"
 
     if reader_view.empty:
         st.info("No PDFs match.")
@@ -411,6 +482,7 @@ with tab_reader:
         if open_reader:
             st.session_state.reader_url = selected_url
             st.session_state.reader_title = selected_title
+            st.session_state.reader_initial_query = reader_query.strip()
 
         if "reader_url" in st.session_state:
             model, pdf_bytes = get_reader_model(
@@ -428,7 +500,10 @@ with tab_reader:
                 pdf_bytes,
                 slug_for(st.session_state.reader_url) + ".pdf",
                 "application/pdf")
-            render_pdf_viewer(model)
+            viewer_model = dict(model)
+            viewer_model["initialQuery"] = st.session_state.get(
+                "reader_initial_query", "")
+            render_pdf_viewer(viewer_model)
 
 # --------------------------------------------------------------------------- #
 # Overview tab
