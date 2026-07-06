@@ -918,35 +918,47 @@ def render_proper_conduct_section(directives):
 
 
 def render_reader_section(catalog):
-    render_section_heading("Reader")
+    render_section_heading("Search All Publications")
     pdf_catalog = catalog[catalog["doc_type"].str.lower() == "pdf"].copy()
     pdf_catalog = pdf_catalog.drop_duplicates(subset=["doc_url"]).reset_index(drop=True)
     reader_docs = load_search_docs(search_corpus_signature())
 
     reader_query = st.text_input(
-        "Find PDF",
+        "Search all publications",
         "",
-        placeholder='Search all PDFs: stock, inflation, "monetary policy"',
+        placeholder='stock, inflation, "monetary policy"',
         key="reader_query")
-    reader_view = build_reader_results(pdf_catalog, reader_docs, reader_query)
+    if reader_query.strip():
+        reader_view = build_reader_results(catalog, reader_docs, reader_query, limit=500)
+    else:
+        reader_view = pdf_catalog.copy()
 
     if reader_query.strip():
+        total_hits = (
+            int(reader_view["full_text_matches"].sum())
+            if "full_text_matches" in reader_view.columns else 0)
+        metric_1, metric_2, metric_3 = st.columns(3)
+        metric_1.metric("Matching publications", f"{len(reader_view):,}")
+        metric_2.metric("Full-text hits", f"{total_hits:,}")
+        metric_3.metric("Indexed PDFs searched", f"{len(reader_docs):,}")
         st.caption(
-            f"{len(reader_view):,} PDFs match across catalog metadata and "
-            f"{len(reader_docs):,} extracted full-text PDFs.")
+            f"Search covers all {len(catalog):,} catalog records by metadata "
+            f"and the full text of {len(reader_docs):,} indexed PDFs.")
         if not reader_view.empty:
             preview = reader_view[[
-                "source_title", "doc_title", "lastmod", "full_text_matches",
-                "matched_terms", "search_snippet", "doc_url"
-            ]].head(12).copy()
+                "source_title", "doc_title", "doc_type", "lastmod",
+                "full_text_matches", "matched_terms", "search_snippet",
+                "doc_url"
+            ]].copy()
             st.dataframe(
                 preview,
                 hide_index=True,
                 width="stretch",
-                height=230,
+                height=380,
                 column_config={
                     "source_title": "Publication",
                     "doc_title": "Link text",
+                    "doc_type": st.column_config.TextColumn("Type", width="small"),
                     "lastmod": st.column_config.TextColumn("Updated", width="medium"),
                     "full_text_matches": st.column_config.NumberColumn(
                         "Text hits", width="small"),
@@ -954,6 +966,11 @@ def render_reader_section(catalog):
                     "search_snippet": "Snippet",
                     "doc_url": st.column_config.LinkColumn("URL"),
                 })
+            st.download_button(
+                "Download search results (CSV)",
+                preview.to_csv(index=False).encode("utf-8"),
+                "boi_publication_search_results.csv",
+                "text/csv")
 
     def reader_label(index):
         row = reader_view.loc[index]
@@ -964,14 +981,20 @@ def render_reader_section(catalog):
         return f"{title}{hit_label} - {date}" if date else f"{title}{hit_label}"
 
     if reader_view.empty:
-        st.info("No PDFs match.")
+        st.info("No publications match.")
+        return
+
+    openable_view = reader_view[
+        reader_view["doc_type"].astype(str).str.lower().eq("pdf")].copy()
+    if openable_view.empty:
+        st.info("No matching PDFs can be opened in the reader. Use the URL column above for non-PDF results.")
         return
 
     pick_col, action_col = st.columns([4, 1])
     with pick_col:
         selected_pdf = st.selectbox(
-            "Publication",
-            reader_view.index.tolist(),
+            "Open a matching PDF",
+            openable_view.index.tolist(),
             format_func=reader_label,
             key="reader_selected_pdf")
     selected_row = reader_view.loc[selected_pdf]
