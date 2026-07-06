@@ -21,6 +21,7 @@ from boi_pdf_text import extract_one, slug_for
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 LINKS = os.path.join(HERE, "boi_pdf_links.csv")
+BANKING_SUPERVISION = os.path.join(HERE, "boi_banking_supervision_index.csv")
 MANIFEST = os.path.join(HERE, "boi_pdf_text_manifest.csv")
 TEXT_DIR = os.path.join(HERE, "boi_texts")
 
@@ -35,6 +36,17 @@ def load_catalog(mtime):  # mtime busts the cache when the file changes
         if c in df.columns:
             df[c] = df[c].fillna("")
     return df.drop_duplicates(subset=["doc_url"])
+
+
+@st.cache_data(show_spinner=False)
+def load_banking_supervision(mtime):
+    if not os.path.exists(BANKING_SUPERVISION):
+        return pd.DataFrame()
+    df = pd.read_csv(BANKING_SUPERVISION)
+    for c in ("url", "title", "section", "lang", "lastmod"):
+        if c in df.columns:
+            df[c] = df[c].fillna("")
+    return df.drop_duplicates(subset=["url"])
 
 
 @st.cache_data(show_spinner=False)
@@ -231,6 +243,34 @@ def build_reader_results(pdf_catalog, docs, query, limit=200):
     ).head(limit)
 
 
+def load_proper_conduct_directives():
+    df = load_banking_supervision(file_mtime(BANKING_SUPERVISION))
+    if df.empty:
+        return df
+    proper_conduct = df["url"].str.contains("/proper_conduct/", case=False, na=False)
+    title_match = df["title"].str.contains(
+        r"\bproper conduct\b", case=False, na=False, regex=True)
+    directives = df[proper_conduct | title_match].copy()
+    if directives.empty:
+        return directives
+    directives["title_display"] = directives["title"].str.title()
+    directives["source_type"] = directives["url"].apply(directive_source_type)
+    return directives.sort_values(
+        ["lastmod", "title_display"], ascending=[False, True])
+
+
+def directive_source_type(url):
+    if "/proper_conduct/" in url:
+        return "Proper conduct"
+    if "/circulars/" in url:
+        return "Circular"
+    if "/letters/" in url:
+        return "Letter"
+    if "/press-releases/" in url:
+        return "Press release"
+    return "Other"
+
+
 st.title("🏦 Bank of Israel Publications Explorer")
 
 if not os.path.exists(LINKS):
@@ -240,8 +280,12 @@ if not os.path.exists(LINKS):
     st.stop()
 
 catalog = load_catalog(file_mtime(LINKS))
-tab_catalog, tab_search, tab_reader = st.tabs(
-    ["📚 Catalog", "🔎 Full Text", "Reader"])
+tab_catalog, tab_search, tab_proper_conduct, tab_reader = st.tabs([
+    "📚 Catalog",
+    "🔎 Full Text",
+    "Proper Conduct of Banking Business Directives",
+    "Reader",
+])
 
 # --------------------------------------------------------------------------- #
 # Catalog tab
@@ -405,6 +449,78 @@ with tab_search:
             st.info("No extracted document text matched that query.")
     elif docs.empty:
         st.warning("No extracted text files were found.")
+
+# --------------------------------------------------------------------------- #
+# Proper Conduct of Banking Business Directives tab
+# --------------------------------------------------------------------------- #
+with tab_proper_conduct:
+    directives = load_proper_conduct_directives()
+
+    d1, d2, d3 = st.columns(3)
+    d1.metric("Directives", f"{len(directives):,}")
+    source_count = directives["source_type"].nunique() if not directives.empty else 0
+    d2.metric("Source types", f"{source_count:,}")
+    latest = directives["lastmod"].max()[:10] if not directives.empty else ""
+    d3.metric("Latest update", latest or "n/a")
+
+    if directives.empty:
+        st.info("No Proper Conduct of Banking Business Directives were found.")
+    else:
+        q_col, type_col, lang_col = st.columns([3, 1.3, 1])
+        with q_col:
+            directive_query = st.text_input(
+                "Search directives",
+                "",
+                placeholder="board of directors, AML, coronavirus",
+                key="proper_conduct_query")
+        with type_col:
+            source_types = sorted(t for t in directives["source_type"].unique() if t)
+            selected_types = st.multiselect(
+                "Type",
+                source_types,
+                default=source_types,
+                key="proper_conduct_types")
+        with lang_col:
+            langs = sorted(lang for lang in directives["lang"].unique() if lang)
+            selected_langs = st.multiselect(
+                "Language",
+                langs,
+                default=langs,
+                key="proper_conduct_langs")
+
+        directive_view = directives
+        if directive_query:
+            q = directive_query.lower()
+            hay = (directive_view["title"] + " " + directive_view["url"]).str.lower()
+            directive_view = directive_view[hay.str.contains(q, regex=False)]
+        if selected_types:
+            directive_view = directive_view[
+                directive_view["source_type"].isin(selected_types)]
+        if selected_langs:
+            directive_view = directive_view[directive_view["lang"].isin(selected_langs)]
+
+        st.markdown(f"**{len(directive_view):,}** directives match.")
+        table = directive_view[[
+            "title_display", "source_type", "lang", "lastmod", "url"
+        ]].copy()
+        st.dataframe(
+            table,
+            hide_index=True,
+            width="stretch",
+            height=420,
+            column_config={
+                "title_display": "Title",
+                "source_type": "Type",
+                "lang": st.column_config.TextColumn("Lang", width="small"),
+                "lastmod": st.column_config.TextColumn("Updated", width="medium"),
+                "url": st.column_config.LinkColumn("URL"),
+            })
+        st.download_button(
+            "Download directives (CSV)",
+            directive_view.drop(columns=["title_display"]).to_csv(
+                index=False).encode("utf-8"),
+            "proper_conduct_banking_business_directives.csv",
+            "text/csv")
 
 # --------------------------------------------------------------------------- #
 # Reader tab
