@@ -367,9 +367,8 @@ if not os.path.exists(LINKS):
     st.stop()
 
 catalog = load_catalog(file_mtime(LINKS))
-tab_catalog, tab_search, tab_proper_conduct, tab_reader = st.tabs([
+tab_catalog, tab_proper_conduct, tab_reader = st.tabs([
     "📚 Catalog",
-    "🔎 Full Text",
     "Proper Conduct of Banking Business Directives",
     "Reader",
 ])
@@ -458,86 +457,6 @@ with tab_catalog:
         st.success(f"Extracted {len(chosen)} document(s).")
 
 # --------------------------------------------------------------------------- #
-# Full-text tab
-# --------------------------------------------------------------------------- #
-with tab_search:
-    docs = load_search_docs(search_corpus_signature())
-    s1, s2, s3 = st.columns(3)
-    s1.metric("Searchable documents", f"{len(docs):,}")
-    text_file_count = len(docs["txt_path"].unique()) if not docs.empty else 0
-    indexed_chars = int(docs["_text"].str.len().sum()) if not docs.empty else 0
-    s2.metric("Text files", f"{text_file_count:,}")
-    s3.metric("Indexed characters", f"{indexed_chars:,}")
-
-    qcol, mode_col, limit_col = st.columns([3, 1, 1])
-    with qcol:
-        full_query = st.text_input(
-            "Search full text",
-            "",
-            placeholder='inflation expectations or "monetary policy"',
-            key="full_text_query")
-    with mode_col:
-        match_mode = st.segmented_control(
-            "Match",
-            ["All terms", "Any term"],
-            default="All terms",
-            key="full_text_match")
-    with limit_col:
-        result_limit = st.number_input(
-            "Results",
-            min_value=5,
-            max_value=100,
-            value=25,
-            step=5,
-            key="full_text_limit")
-
-    terms = parse_terms(full_query)
-    if not docs.empty and terms:
-        results = search_full_text(docs, terms, match_mode, int(result_limit))
-        st.markdown(f"**{len(results):,}** documents match.")
-        if not results.empty:
-            table = results[["source_title", "doc_title", "section", "lastmod",
-                             "pages", "matches", "matched_terms", "doc_url"]]
-            st.dataframe(
-                table,
-                hide_index=True,
-                width="stretch",
-                column_config={
-                    "source_title": "Publication",
-                    "doc_title": "Link text",
-                    "section": "Section",
-                    "lastmod": st.column_config.TextColumn("Updated", width="medium"),
-                    "pages": st.column_config.NumberColumn("Pages", width="small"),
-                    "matches": st.column_config.NumberColumn("Hits", width="small"),
-                    "matched_terms": "Terms",
-                    "doc_url": st.column_config.LinkColumn("URL"),
-                })
-            st.download_button(
-                "⬇️ Download search results (CSV)",
-                results.drop(columns=["_text"]).to_csv(index=False).encode("utf-8"),
-                "boi_full_text_search_results.csv",
-                "text/csv")
-
-            for i, row in results.iterrows():
-                title = row["source_title"] or row["doc_title"] or row["doc_url"]
-                with st.expander(
-                        f"🔎 {title} — {row['matches']:,} hits",
-                        expanded=(i == results.index[0])):
-                    st.caption(row["doc_url"])
-                    st.text_area("Snippets", row["snippet"], height=160,
-                                 key=f"snippet_{i}")
-                    st.download_button(
-                        "⬇️ Download full text (.txt)",
-                        row["_text"].encode("utf-8"),
-                        slug_for(row["doc_url"]) + ".txt",
-                        "text/plain",
-                        key=f"full_text_download_{i}")
-        else:
-            st.info("No extracted document text matched that query.")
-    elif docs.empty:
-        st.warning("No extracted text files were found.")
-
-# --------------------------------------------------------------------------- #
 # Proper Conduct of Banking Business Directives tab
 # --------------------------------------------------------------------------- #
 with tab_proper_conduct:
@@ -606,6 +525,43 @@ with tab_proper_conduct:
             directive_view[export_cols].to_csv(index=False).encode("utf-8"),
             "proper_conduct_banking_business_directives.csv",
             "text/csv")
+
+        if not directive_view.empty:
+            def directive_preview_label(index):
+                row = directive_view.loc[index]
+                number = row["directive_number"]
+                title = row["title_display"] or row["title"]
+                return f"{number} - {title}" if number else title
+
+            selected_directive = st.selectbox(
+                "Preview directive",
+                directive_view.index.tolist(),
+                format_func=directive_preview_label,
+                key="proper_conduct_preview_directive")
+            selected = directive_view.loc[selected_directive]
+            st.markdown(
+                f"**{selected['directive_number']}** "
+                f"{selected['title_display']}")
+
+            page_col, pdf_col = st.columns(2)
+            with page_col:
+                st.link_button(
+                    "Open directive page",
+                    selected["url"],
+                    width="stretch")
+            with pdf_col:
+                st.link_button(
+                    "Open PDF",
+                    selected["file_url"],
+                    width="stretch")
+
+            if selected["file_url"]:
+                st.iframe(
+                    selected["file_url"],
+                    height=720,
+                    width="stretch")
+            else:
+                st.info("No PDF file is available for this directive.")
 
 # --------------------------------------------------------------------------- #
 # Reader tab
