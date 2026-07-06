@@ -947,34 +947,35 @@ def render_reader_section(catalog, directives):
     remaining = max(0, len(pdf_catalog) - len(indexed_urls))
     running_pid = pdf_index_process()
 
-    i1, i2, i3, i4 = st.columns(4)
-    i1.metric("PDF files", f"{len(pdf_catalog):,}")
-    i2.metric("Full-text indexed", f"{len(indexed_urls):,}")
-    i3.metric("Remaining", f"{remaining:,}")
-    i4.metric("Indexer", "Running" if running_pid else "Idle")
+    with st.expander("Index status", expanded=False):
+        i1, i2, i3, i4 = st.columns(4)
+        i1.metric("PDF files", f"{len(pdf_catalog):,}")
+        i2.metric("Full-text indexed", f"{len(indexed_urls):,}")
+        i3.metric("Remaining", f"{remaining:,}")
+        i4.metric("Indexer", "Running" if running_pid else "Idle")
 
-    index_col, stop_col = st.columns([1, 1])
-    with index_col:
-        if st.button(
-                "Index remaining PDFs",
-                type="primary",
-                disabled=running_pid is not None or remaining == 0,
-                width="stretch"):
-            pid = start_pdf_text_index()
-            st.success(f"Full-text indexing started. PID {pid}.")
-    with stop_col:
-        if st.button(
-                "Stop indexing",
-                disabled=running_pid is None,
-                width="stretch"):
-            if stop_pdf_text_index():
-                st.warning("Full-text indexing stop requested.")
-            else:
-                st.info("No indexing process is running.")
+        index_col, stop_col = st.columns([1, 1])
+        with index_col:
+            if st.button(
+                    "Index remaining PDFs",
+                    type="primary",
+                    disabled=running_pid is not None or remaining == 0,
+                    width="stretch"):
+                pid = start_pdf_text_index()
+                st.success(f"Full-text indexing started. PID {pid}.")
+        with stop_col:
+            if st.button(
+                    "Stop indexing",
+                    disabled=running_pid is None,
+                    width="stretch"):
+                if stop_pdf_text_index():
+                    st.warning("Full-text indexing stop requested.")
+                else:
+                    st.info("No indexing process is running.")
 
-    log_tail = read_index_log_tail()
-    if log_tail:
-        with st.expander("Index log", expanded=False):
+        log_tail = read_index_log_tail()
+        if log_tail:
+            st.text("Index log")
             st.text(log_tail)
 
     reader_query = st.text_input(
