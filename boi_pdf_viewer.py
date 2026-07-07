@@ -30,7 +30,7 @@ def build_pdf_viewer_model(
         *,
         title: str,
         source_url: str,
-        render_scale: float = 1.35,
+        render_scale: float = 1.75,
         max_pages: int | None = None) -> dict[str, Any]:
     """Build a self-contained document model for the HTML reader."""
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
@@ -86,7 +86,7 @@ def build_pdf_viewer_model(
     }
 
 
-def render_pdf_viewer(model: dict[str, Any], *, height: int = 860) -> None:
+def render_pdf_viewer(model: dict[str, Any], *, height: int = 1040) -> None:
     """Render the interactive reader inside Streamlit."""
     st.iframe(pdf_viewer_html(model), height=height)
 
@@ -133,7 +133,7 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
   .reader {{
     height: 100vh;
     display: grid;
-    grid-template-columns: 330px minmax(0, 1fr);
+    grid-template-columns: 310px minmax(0, 1fr);
     gap: 0;
     overflow: hidden;
     border: 1px solid var(--line);
@@ -397,7 +397,7 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
   .stage {{
     min-height: 0;
     display: grid;
-    grid-template-columns: minmax(360px, 1.08fr) minmax(340px, 0.92fr);
+    grid-template-columns: minmax(620px, 2.75fr) minmax(280px, 0.72fr);
     gap: 1px;
     overflow: hidden;
     background: var(--line);
@@ -412,18 +412,18 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
   }}
 
   .pdf-pane {{
-    padding: 24px 22px 38px;
+    padding: 16px 14px 38px;
   }}
 
-  .text-pane {{
-    padding: 24px 24px 44px;
+  .analysis-pane {{
+    padding: 16px 16px 34px;
     background: var(--paper);
   }}
 
   .pdf-page {{
     position: relative;
-    width: min(100%, 920px);
-    margin: 0 auto 24px;
+    width: min(100%, 1320px);
+    margin: 0 auto 20px;
     background: white;
     box-shadow: var(--shadow);
   }}
@@ -457,36 +457,84 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
     z-index: 2;
   }}
 
-  .text-page {{
-    max-width: 760px;
-    margin: 0 auto 28px;
-    padding: 14px 18px 24px;
-    border-bottom: 1px solid var(--line);
+  .analysis-card {{
+    max-width: 440px;
+    margin: 0 auto;
+    display: grid;
+    gap: 15px;
   }}
 
-  .text-page.active {{
-    background: rgba(237, 243, 244, 0.72);
-  }}
-
-  .text-page.active .page-label {{
-    color: var(--accent-strong);
-  }}
-
-  .page-label {{
-    margin-bottom: 10px;
+  .analysis-kicker {{
     color: var(--muted);
-    font-size: 12px;
-    font-weight: 700;
+    font-size: 11px;
+    font-weight: 800;
     letter-spacing: 0.05em;
     text-transform: uppercase;
   }}
 
-  .page-text {{
-    white-space: pre-wrap;
+  .analysis-card h2 {{
+    margin: 0;
     color: #20272d;
     font-family: Georgia, "Times New Roman", serif;
-    font-size: 17px;
-    line-height: 1.64;
+    font-size: 23px;
+    line-height: 1.18;
+  }}
+
+  .analysis-citation {{
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.35;
+  }}
+
+  .analysis-section {{
+    display: grid;
+    gap: 8px;
+    padding-top: 13px;
+    border-top: 1px solid var(--line);
+  }}
+
+  .analysis-section h3 {{
+    margin: 0;
+    color: var(--accent-strong);
+    font-size: 13px;
+    font-weight: 800;
+  }}
+
+  .analysis-section p,
+  .analysis-list {{
+    margin: 0;
+    color: #2c353b;
+    font-size: 13px;
+    line-height: 1.48;
+  }}
+
+  .analysis-list {{
+    padding-left: 18px;
+  }}
+
+  .analysis-list li {{
+    margin-bottom: 7px;
+  }}
+
+  .analysis-quote {{
+    margin: 0;
+    padding: 10px 12px;
+    border-left: 3px solid var(--accent);
+    background: rgba(237, 243, 244, 0.72);
+    color: #20272d;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 14px;
+    line-height: 1.48;
+  }}
+
+  .analysis-note {{
+    padding: 10px 12px;
+    border: 1px solid rgba(36, 78, 96, 0.18);
+    border-radius: 8px;
+    background: #f2f7f7;
+    color: var(--accent-strong);
+    font-size: 12px;
+    line-height: 1.45;
   }}
 
   mark {{
@@ -522,6 +570,10 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
 
     .pane {{
       height: 48vh;
+    }}
+
+    .analysis-card {{
+      max-width: 720px;
     }}
   }}
 </style>
@@ -567,7 +619,7 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
   <main class="main">
     <header class="stage-header">
       <div class="stage-title">
-        <span>PDF + extracted text</span>
+        <span>PDF + legal analysis</span>
         <strong id="stageTitle"></strong>
       </div>
       <div class="stage-meta">
@@ -577,7 +629,7 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
     </header>
     <div class="stage">
       <section id="pdfPane" class="pane pdf-pane" aria-label="PDF pages"></section>
-      <section id="textPane" class="pane text-pane" aria-label="Extracted text"></section>
+      <section id="analysisPane" class="pane analysis-pane" aria-label="Legal analysis"></section>
     </div>
   </main>
 </div>
@@ -591,12 +643,11 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
     activeResult: -1,
     matches: [],
     queryParts: [],
-    syncing: false,
-    syncTimer: null
+    syncing: false
   }};
 
   const pdfPane = document.getElementById("pdfPane");
-  const textPane = document.getElementById("textPane");
+  const analysisPane = document.getElementById("analysisPane");
   const resultsEl = document.getElementById("results");
   const searchInput = document.getElementById("searchInput");
   const resultCount = document.getElementById("resultCount");
@@ -667,6 +718,137 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
     return out;
   }}
 
+  function compactText(rawText) {{
+    return String(rawText || "").replace(/\\s+/g, " ").trim();
+  }}
+
+  function truncate(value, maxLength) {{
+    const text = compactText(value);
+    return text.length > maxLength ? text.slice(0, maxLength - 3).trim() + "..." : text;
+  }}
+
+  function pageSentences(page, limit = 2) {{
+    const text = compactText(page && page.text);
+    const sentences = text.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [];
+    return sentences.map(item => compactText(item)).filter(Boolean).slice(0, limit);
+  }}
+
+  const legalThemeRules = [
+    {{
+      label: "Banking supervision",
+      terms: ["banking supervision", "banking corporation", "proper conduct", "directive", "supervision"]
+    }},
+    {{
+      label: "Capital, liquidity, and credit risk",
+      terms: ["capital", "liquidity", "credit risk", "exposure", "risk weighted", "assets", "default"]
+    }},
+    {{
+      label: "Consumer credit and lending conduct",
+      terms: ["loan", "housing", "mortgage", "customer", "interest", "debit card", "credit card", "fees"]
+    }},
+    {{
+      label: "Governance, audit, and reporting",
+      terms: ["board", "directors", "auditor", "reporting", "annual report", "disclosure", "governance"]
+    }},
+    {{
+      label: "Market and monetary conditions",
+      terms: ["inflation", "interest rate", "monetary", "market", "exchange rate", "bond", "stock"]
+    }},
+    {{
+      label: "Operational resilience",
+      terms: ["cyber", "technology", "failure", "incident", "continuity", "outsourcing", "resilience"]
+    }}
+  ];
+
+  function detectLegalThemes(text) {{
+    const haystack = compactText(text).toLowerCase();
+    const themes = legalThemeRules
+      .filter(rule => rule.terms.some(term => haystack.includes(term)))
+      .map(rule => rule.label);
+    return themes.length ? themes.slice(0, 3) : ["General regulatory context"];
+  }}
+
+  function legalIssuesFor(text, themes) {{
+    const haystack = compactText(text).toLowerCase();
+    const issues = [];
+    if (haystack.includes("shall") || haystack.includes("must") || haystack.includes("required")) {{
+      issues.push("Identify whether the language creates a mandatory obligation, a supervisory expectation, or background guidance.");
+    }}
+    if (haystack.includes("date") || haystack.includes("effective") || /\\b20\\d{{2}}\\b/.test(haystack)) {{
+      issues.push("Track dates, transition periods, and publication timing before relying on the passage.");
+    }}
+    if (haystack.includes("bank") || haystack.includes("corporation") || haystack.includes("customer")) {{
+      issues.push("Map the affected parties and confirm whether the rule applies to banks, banking corporations, customers, or market participants.");
+    }}
+    if (themes.some(theme => theme.includes("Capital") || theme.includes("Consumer"))) {{
+      issues.push("Check whether the passage changes risk treatment, lending practice, disclosure, or customer-facing conduct.");
+    }}
+    if (!issues.length) {{
+      issues.push("Treat the passage as context and verify the controlling directive, circular, or source publication before citation.");
+    }}
+    return issues.slice(0, 4);
+  }}
+
+  function reviewQuestionsFor(match) {{
+    const questions = [
+      "What legal obligation, supervisory expectation, or factual premise does this passage support?",
+      "Does the page define a term, threshold, exception, deadline, or affected entity?",
+      "What source should be cited alongside this page to make the analysis complete?"
+    ];
+    if (match) {{
+      questions.unshift(`How does the selected term "${{match.label}}" affect the interpretation of this page?`);
+    }}
+    return questions.slice(0, 4);
+  }}
+
+  function renderList(items) {{
+    return "<ul class=\\"analysis-list\\">" + items
+      .map(item => `<li>${{escapeHtml(item)}}</li>`)
+      .join("") + "</ul>";
+  }}
+
+  function renderLegalAnalysis(match) {{
+    const page = pages[state.activePage - 1] || pages[0] || {{}};
+    const pageNumber = page.number || state.activePage || 1;
+    const activeMatch = match || state.matches.find(item => (
+      item.id === state.activeResult && item.page === pageNumber
+    ));
+    const sentences = pageSentences(page, 2);
+    const pageText = compactText(page.text);
+    const evidence = activeMatch
+      ? activeMatch.snippet
+      : (sentences.join(" ") || truncate(pageText, 360) || "No extracted text is available for this page.");
+    const themes = detectLegalThemes(pageText + " " + evidence);
+    const reading = themes[0] === "General regulatory context"
+      ? "This page appears to provide context for the publication. Use it to support factual background, then confirm the operative legal rule in the relevant directive, circular, or source document."
+      : `This page is legally relevant to ${{themes.join(", ")}}. Read it for the factual and supervisory context that may affect obligations, risk assessment, disclosure, or compliance controls.`;
+
+    analysisPane.innerHTML = `
+      <article class="analysis-card" data-page="${{pageNumber}}">
+        <div class="analysis-kicker">Legal analysis</div>
+        <h2>Page ${{pageNumber}}</h2>
+        <div class="analysis-citation">${{escapeHtml(payload.title)}} · Page ${{pageNumber}} of ${{pageInput.max}}</div>
+        <section class="analysis-section">
+          <h3>Regulatory reading</h3>
+          <p>${{escapeHtml(reading)}}</p>
+        </section>
+        <section class="analysis-section">
+          <h3>Issues flagged</h3>
+          ${{renderList(legalIssuesFor(pageText + " " + evidence, themes))}}
+        </section>
+        <section class="analysis-section">
+          <h3>Selected evidence</h3>
+          <blockquote class="analysis-quote">${{markText(evidence, state.queryParts)}}</blockquote>
+        </section>
+        <section class="analysis-section">
+          <h3>Review questions</h3>
+          ${{renderList(reviewQuestionsFor(activeMatch))}}
+        </section>
+        <div class="analysis-note">Use the PDF page as the controlling visual source. This panel is a structured reading aid for legal review.</div>
+      </article>
+    `;
+  }}
+
   function renderPages() {{
     pdfPane.innerHTML = pages.map(page => `
       <article class="pdf-page" data-page="${{page.number}}" style="aspect-ratio:${{page.width}} / ${{page.height}}">
@@ -675,12 +857,7 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
       </article>
     `).join("");
 
-    textPane.innerHTML = pages.map(page => `
-      <article class="text-page" data-page="${{page.number}}">
-        <div class="page-label">Page ${{page.number}}</div>
-        <div class="page-text">${{markText(page.text, state.queryParts)}}</div>
-      </article>
-    `).join("");
+    renderLegalAnalysis();
   }}
 
   function snippetFor(page, startWord, endWord) {{
@@ -832,7 +1009,6 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
     setActivePage(pageNumber);
     state.syncing = true;
     scrollPaneToPage(pdfPane, state.activePage);
-    scrollPaneToPage(textPane, state.activePage);
     window.setTimeout(() => {{
       state.syncing = false;
     }}, 450);
@@ -855,14 +1031,18 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
   }}
 
   function updateSelectedContext(match) {{
-    const activeMatch = match || state.matches.find(item => item.id === state.activeResult);
+    const activeMatch = match || state.matches.find(item => (
+      item.id === state.activeResult && item.page === state.activePage
+    ));
     if (activeMatch) {{
       selectedTitle.textContent = `Page ${{activeMatch.page}} - ${{activeMatch.label}}`;
       selectedContext.textContent = activeMatch.snippet;
+      renderLegalAnalysis(activeMatch);
       return;
     }}
     selectedTitle.textContent = `Page ${{state.activePage}}`;
     selectedContext.textContent = pagePreview(state.activePage);
+    renderLegalAnalysis();
   }}
 
   function findVisiblePage(pane) {{
@@ -879,21 +1059,13 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
     return bestPage;
   }}
 
-  function bindScrollSync(source, target) {{
+  function bindPageTracking(source) {{
     source.addEventListener("scroll", () => {{
       if (state.syncing) {{
         return;
       }}
       const page = findVisiblePage(source);
       setActivePage(page);
-      window.clearTimeout(state.syncTimer);
-      state.syncTimer = window.setTimeout(() => {{
-        state.syncing = true;
-        scrollPaneToPage(target, page);
-        window.setTimeout(() => {{
-          state.syncing = false;
-        }}, 350);
-      }}, 100);
     }}, {{ passive: true }});
   }}
 
@@ -905,11 +1077,11 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
     renderHighlights();
     renderResults();
     if (state.activeResult >= 0) {{
-      updateSelectedContext(state.matches[0]);
+      scrollToPage(state.matches[0].page);
     }} else {{
       updateSelectedContext();
+      setActivePage(state.activePage);
     }}
-    setActivePage(state.activePage);
   }}
 
   document.getElementById("prevPage").addEventListener("click", () => {{
@@ -943,8 +1115,7 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
     renderResults();
     setActivePage(1);
   }}
-  bindScrollSync(pdfPane, textPane);
-  bindScrollSync(textPane, pdfPane);
+  bindPageTracking(pdfPane);
 }})();
 </script>
 </body>

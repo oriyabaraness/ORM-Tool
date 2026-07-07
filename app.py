@@ -133,7 +133,8 @@ def get_text(url):
 @st.cache_data(show_spinner="Preparing reader...")
 def get_reader_model(url, title):
     pdf_bytes = download_pdf(url)
-    model = build_pdf_viewer_model(pdf_bytes, title=title, source_url=url)
+    model = build_pdf_viewer_model(
+        pdf_bytes, title=title, source_url=url, render_scale=1.75)
     return model, pdf_bytes
 
 
