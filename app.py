@@ -29,6 +29,7 @@ BANKING_SUPERVISION = os.path.join(HERE, "boi_banking_supervision_index.csv")
 PUBLICATIONS_INDEX = os.path.join(HERE, "boi_publications_index.csv")
 PROPER_CONDUCT_DIRECTIVES = os.path.join(
     HERE, "boi_proper_conduct_directives.csv")
+JORDAN_CBJ_REGULATIONS = os.path.join(HERE, "jordan_cbj_regulations.csv")
 MANIFEST = os.path.join(HERE, "boi_pdf_text_manifest.csv")
 LOCAL_MANIFEST = os.path.join(HERE, "boi_pdf_text_manifest.local.csv")
 TEXT_DIR = os.path.join(HERE, "boi_texts")
@@ -73,6 +74,20 @@ def load_proper_conduct_metadata(mtime):
         return pd.DataFrame()
     df = pd.read_csv(PROPER_CONDUCT_DIRECTIVES, dtype=str).fillna("")
     return df.drop_duplicates(subset=["url"])
+
+
+@st.cache_data(show_spinner=False)
+def load_jordan_cbj_regulations(mtime):
+    if not os.path.exists(JORDAN_CBJ_REGULATIONS):
+        return pd.DataFrame()
+    df = pd.read_csv(JORDAN_CBJ_REGULATIONS, dtype=str).fillna("")
+    expected = (
+        "country", "regulator", "title", "category", "size", "url",
+        "source_url", "file_type", "last_seen", "connection_status")
+    for column in expected:
+        if column not in df.columns:
+            df[column] = ""
+    return df.drop_duplicates(subset=["title", "url"])
 
 
 @st.cache_data(show_spinner=False)
@@ -322,13 +337,14 @@ def with_publication_type(df):
     return result
 
 
-def build_regional_map_data(reader_view, query):
+def build_regional_map_data(reader_view, query, jordan_docs=None):
     rows = []
     israel_matches = len(reader_view) if reader_view is not None else 0
     israel_hits = 0
     if reader_view is not None and not reader_view.empty:
         if "full_text_matches" in reader_view.columns:
             israel_hits = int(reader_view["full_text_matches"].fillna(0).sum())
+    jordan_matches = len(jordan_docs) if jordan_docs is not None else 0
 
     for market in REGIONAL_BANKING_MARKETS:
         row = dict(market)
@@ -343,6 +359,14 @@ def build_regional_map_data(reader_view, query):
             row["radius"] = min(260000, 76000 + israel_matches * 120)
             row["fill_color"] = [255, 76, 76, 210]
             row["line_color"] = [132, 28, 35, 235]
+        elif market["country"] == "Jordan" and jordan_matches:
+            row["publication_matches"] = jordan_matches
+            row["text_hits"] = 0
+            row["coverage"] = f"{jordan_matches:,} CBJ regulation records"
+            row["status"] = "Connected external corpus"
+            row["radius"] = min(220000, 76000 + jordan_matches * 1400)
+            row["fill_color"] = [26, 132, 108, 210]
+            row["line_color"] = [8, 86, 74, 235]
         else:
             row["publication_matches"] = 0
             row["text_hits"] = 0
@@ -355,8 +379,8 @@ def build_regional_map_data(reader_view, query):
     return pd.DataFrame(rows)
 
 
-def render_regional_banking_map(reader_view, query):
-    map_data = build_regional_map_data(reader_view, query)
+def render_regional_banking_map(reader_view, query, jordan_docs=None):
+    map_data = build_regional_map_data(reader_view, query, jordan_docs)
     layers = [
         pdk.Layer(
             "ScatterplotLayer",
@@ -1280,22 +1304,26 @@ def render_catalog_section(catalog):
 def render_regional_map_section(catalog, directives):
     render_section_heading("Regional Banking Map")
     pdf_catalog = get_pdf_catalog(catalog, directives)
+    jordan_docs = load_jordan_cbj_regulations(
+        file_mtime(JORDAN_CBJ_REGULATIONS))
+    connected_feeds = 1 if not jordan_docs.empty else 0
+    pending_feeds = max(
+        0, len(REGIONAL_BANKING_MARKETS) - 1 - connected_feeds)
 
-    m1, m2, m3 = st.columns(3)
+    m1, m2, m3, m4 = st.columns(4)
     m1.metric("Mapped markets", f"{len(REGIONAL_BANKING_MARKETS):,}")
     m2.metric("BOI PDFs", f"{len(pdf_catalog):,}")
-    m3.metric(
-        "Comparison feeds",
-        f"{len(REGIONAL_BANKING_MARKETS) - 1:,} pending")
+    m3.metric("Jordan CBJ records", f"{len(jordan_docs):,}")
+    m4.metric("Other feeds", f"{pending_feeds:,} pending")
 
     st.caption(
         "This layer is separated from the Reader. It is the workspace for "
         "comparing Bank of Israel publications with regional banking "
         "regulators as additional country corpora are connected.")
-    render_regional_banking_map(pdf_catalog, "")
+    render_regional_banking_map(pdf_catalog, "", jordan_docs)
 
-    markets = build_regional_map_data(pdf_catalog, "")[[
-        "country", "regulator", "role", "coverage"
+    markets = build_regional_map_data(pdf_catalog, "", jordan_docs)[[
+        "country", "regulator", "status", "coverage"
     ]].copy()
     st.dataframe(
         markets,
@@ -1305,9 +1333,67 @@ def render_regional_map_section(catalog, directives):
         column_config={
             "country": "Country",
             "regulator": "Regulator",
-            "role": "Corpus status",
+            "status": "Corpus status",
             "coverage": "Current coverage",
         })
+
+    st.subheader("Central Bank of Jordan Regulations")
+    st.caption(
+        "Source: official Central Bank of Jordan regulations listing. "
+        "Run `python jordan_cbj_index.py` to refresh the local snapshot.")
+    st.link_button(
+        "Open CBJ regulations source",
+        "https://www.cbj.gov.jo/EN/List/Instructions_")
+
+    if jordan_docs.empty:
+        st.info(
+            "No Jordan CBJ snapshot found yet. Run `python jordan_cbj_index.py` "
+            "from the project folder to create `jordan_cbj_regulations.csv`.")
+        return
+
+    jordan_query = st.text_input(
+        "Search Jordan regulations",
+        placeholder="capital, consumer protection, Basel, cyber",
+        key="jordan_cbj_query")
+    jordan_view = jordan_docs.copy()
+    if jordan_query.strip():
+        needles = [
+            term.lower()
+            for term in re.split(r"[\s,]+", jordan_query.strip())
+            if term.strip()
+        ]
+        haystack = jordan_view[[
+            "title", "category", "regulator", "file_type",
+            "connection_status"
+        ]].astype(str).agg(" ".join, axis=1).str.lower()
+        mask = pd.Series(True, index=jordan_view.index)
+        for needle in needles:
+            mask &= haystack.str.contains(re.escape(needle), na=False)
+        jordan_view = jordan_view[mask]
+
+    st.write(f"{len(jordan_view):,} Jordan records match.")
+    display = jordan_view[[
+        "title", "category", "size", "file_type", "last_seen", "url"
+    ]].copy()
+    st.dataframe(
+        display,
+        hide_index=True,
+        width="stretch",
+        height=420,
+        column_config={
+            "title": "Publication",
+            "category": "Publication type",
+            "size": "Size",
+            "file_type": "File type",
+            "last_seen": "Indexed",
+            "url": st.column_config.LinkColumn(
+                "Official link", display_text="Open", width="medium"),
+        })
+    st.download_button(
+        "Download Jordan CBJ index (CSV)",
+        jordan_view.to_csv(index=False).encode("utf-8"),
+        "jordan_cbj_regulations.csv",
+        "text/csv")
 
 
 def render_reader_section(catalog, directives):
