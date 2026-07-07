@@ -86,7 +86,7 @@ def build_pdf_viewer_model(
     }
 
 
-def render_pdf_viewer(model: dict[str, Any], *, height: int = 1040) -> None:
+def render_pdf_viewer(model: dict[str, Any], *, height: int = 1120) -> None:
     """Render the interactive reader inside Streamlit."""
     st.iframe(pdf_viewer_html(model), height=height)
 
@@ -101,17 +101,18 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
 <style>
   :root {{
     color-scheme: light;
-    --bg: #f6f4ef;
-    --ink: #172026;
-    --muted: #5d6870;
-    --line: #ded8cf;
-    --paper: #fffefa;
-    --panel: #f8f6f1;
-    --accent: #244e60;
-    --accent-strong: #163744;
+    --bg: #f7f7f5;
+    --ink: #222222;
+    --muted: #666666;
+    --line: #ddddda;
+    --paper: #ffffff;
+    --panel: #fafafa;
+    --search: #ececea;
+    --accent: #17345b;
+    --accent-strong: #102845;
     --hit: rgba(241, 204, 83, 0.40);
-    --hit-active: rgba(68, 127, 146, 0.34);
-    --shadow: 0 18px 45px rgba(38, 31, 20, 0.13);
+    --hit-active: rgba(23, 52, 91, 0.25);
+    --shadow: 0 14px 34px rgba(0, 0, 0, 0.12);
   }}
 
   * {{ box-sizing: border-box; }}
@@ -133,11 +134,11 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
   .reader {{
     height: 100vh;
     display: grid;
-    grid-template-columns: 310px minmax(0, 1fr);
+    grid-template-columns: 300px minmax(0, 1fr);
     gap: 0;
     overflow: hidden;
     border: 1px solid var(--line);
-    background: var(--panel);
+    background: var(--paper);
   }}
 
   .sidebar {{
@@ -145,9 +146,9 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
     display: flex;
     flex-direction: column;
     gap: 14px;
-    padding: 18px 18px 16px;
+    padding: 18px 16px 16px;
     border-right: 1px solid var(--line);
-    background: #f9f7f2;
+    background: var(--paper);
   }}
 
   .title {{
@@ -157,9 +158,10 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
 
   .title h1 {{
     margin: 0;
-    font-size: 19px;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 20px;
     line-height: 1.25;
-    font-weight: 700;
+    font-weight: 600;
     letter-spacing: 0;
   }}
 
@@ -190,18 +192,18 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
   .page-jump input {{
     width: 100%;
     height: 38px;
-    border: 1px solid var(--line);
-    border-radius: 7px;
+    border: 1px solid transparent;
+    border-radius: 18px;
     padding: 0 10px;
     color: var(--ink);
-    background: white;
+    background: var(--search);
     outline: none;
   }}
 
   .search input:focus,
   .page-jump input:focus {{
     border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(43, 111, 120, 0.12);
+    box-shadow: 0 0 0 3px rgba(23, 52, 91, 0.12);
   }}
 
   .toolbar {{
@@ -215,9 +217,9 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
   .result-nav button {{
     height: 36px;
     border: 1px solid var(--line);
-    border-radius: 7px;
+    border-radius: 4px;
     color: var(--ink);
-    background: white;
+    background: var(--paper);
     cursor: pointer;
   }}
 
@@ -261,8 +263,8 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
     gap: 8px;
     padding: 13px;
     border: 1px solid var(--line);
-    border-radius: 8px;
-    background: white;
+    border-radius: 6px;
+    background: var(--panel);
   }}
 
   .context-title {{
@@ -307,9 +309,9 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
   .result {{
     width: 100%;
     border: 1px solid var(--line);
-    border-radius: 8px;
+    border-radius: 6px;
     padding: 10px;
-    background: white;
+    background: var(--paper);
     color: var(--ink);
     text-align: left;
     cursor: pointer;
@@ -318,7 +320,7 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
   .result:hover,
   .result.active {{
     border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(43, 111, 120, 0.10);
+    box-shadow: 0 0 0 3px rgba(23, 52, 91, 0.10);
   }}
 
   .result .meta {{
@@ -339,7 +341,7 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
     color: var(--muted);
     font-size: 13px;
     border: 1px dashed var(--line);
-    border-radius: 8px;
+    border-radius: 6px;
     background: rgba(255, 255, 255, 0.65);
   }}
 
@@ -360,7 +362,7 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
     align-items: center;
     padding: 13px 18px;
     border-bottom: 1px solid var(--line);
-    background: rgba(255, 254, 250, 0.96);
+    background: var(--paper);
   }}
 
   .stage-title {{
@@ -397,7 +399,7 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
   .stage {{
     min-height: 0;
     display: grid;
-    grid-template-columns: minmax(620px, 2.75fr) minmax(280px, 0.72fr);
+    grid-template-columns: minmax(720px, 3.55fr) minmax(300px, 0.9fr);
     gap: 1px;
     overflow: hidden;
     background: var(--line);
@@ -412,24 +414,24 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
   }}
 
   .pdf-pane {{
-    padding: 16px 14px 38px;
+    padding: 18px 18px 42px;
   }}
 
   .analysis-pane {{
-    padding: 16px 16px 34px;
+    padding: 28px 20px 38px;
     background: var(--paper);
   }}
 
   .pdf-page {{
     position: relative;
-    width: min(100%, 1320px);
-    margin: 0 auto 20px;
+    width: min(100%, 1460px);
+    margin: 0 auto 24px;
     background: white;
     box-shadow: var(--shadow);
   }}
 
   .pdf-page.active {{
-    outline: 3px solid rgba(36, 78, 96, 0.20);
+    outline: 3px solid rgba(23, 52, 91, 0.20);
   }}
 
   .pdf-page img {{
@@ -453,15 +455,15 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
 
   .pdf-hit.active {{
     background: var(--hit-active);
-    outline: 2px solid rgba(23, 77, 86, 0.82);
+    outline: 2px solid rgba(23, 52, 91, 0.82);
     z-index: 2;
   }}
 
   .analysis-card {{
-    max-width: 440px;
+    max-width: 430px;
     margin: 0 auto;
     display: grid;
-    gap: 15px;
+    gap: 16px;
   }}
 
   .analysis-kicker {{
@@ -474,10 +476,11 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
 
   .analysis-card h2 {{
     margin: 0;
-    color: #20272d;
+    color: var(--ink);
     font-family: Georgia, "Times New Roman", serif;
-    font-size: 23px;
+    font-size: 26px;
     line-height: 1.18;
+    font-weight: 600;
   }}
 
   .analysis-citation {{
@@ -489,13 +492,13 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
   .analysis-section {{
     display: grid;
     gap: 8px;
-    padding-top: 13px;
+    padding-top: 15px;
     border-top: 1px solid var(--line);
   }}
 
   .analysis-section h3 {{
     margin: 0;
-    color: var(--accent-strong);
+    color: var(--muted);
     font-size: 13px;
     font-weight: 800;
   }}
@@ -503,9 +506,9 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
   .analysis-section p,
   .analysis-list {{
     margin: 0;
-    color: #2c353b;
-    font-size: 13px;
-    line-height: 1.48;
+    color: #333333;
+    font-size: 14px;
+    line-height: 1.55;
   }}
 
   .analysis-list {{
@@ -518,20 +521,20 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
 
   .analysis-quote {{
     margin: 0;
-    padding: 10px 12px;
+    padding: 12px 14px;
     border-left: 3px solid var(--accent);
-    background: rgba(237, 243, 244, 0.72);
-    color: #20272d;
+    background: #f4f6f7;
+    color: var(--ink);
     font-family: Georgia, "Times New Roman", serif;
-    font-size: 14px;
-    line-height: 1.48;
+    font-size: 15px;
+    line-height: 1.52;
   }}
 
   .analysis-note {{
     padding: 10px 12px;
-    border: 1px solid rgba(36, 78, 96, 0.18);
-    border-radius: 8px;
-    background: #f2f7f7;
+    border: 1px solid rgba(23, 52, 91, 0.18);
+    border-radius: 6px;
+    background: #f5f7fa;
     color: var(--accent-strong);
     font-size: 12px;
     line-height: 1.45;

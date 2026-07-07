@@ -891,26 +891,49 @@ def apply_library_styles():
         """
         <style>
         :root {
-            --boi-ink: #202124;
-            --boi-muted: #5f6368;
-            --boi-line: #d8d2c6;
-            --boi-accent: #a34f36;
-            --boi-link: #1f5f73;
-            --boi-bg-soft: #f7f4ef;
+            --boi-navy: #17345b;
+            --boi-navy-hover: #102845;
+            --boi-ink: #222222;
+            --boi-muted: #666666;
+            --boi-line: #ddddda;
+            --boi-search: #ececea;
+            --boi-paper: #ffffff;
+            --boi-page: #f7f7f5;
+            --boi-banner: #eef5ff;
+            --boi-banner-border: #d6e5ff;
+            --boi-teal: #006d7e;
+            --boi-blue: #6fa6bd;
+            --boi-gold: #c0ad5c;
+            --boi-green: #5f986c;
+            --boi-rose: #9b2f4a;
+            --boi-purple: #5d3f85;
+            --boi-serif: Georgia, "Times New Roman", serif;
+            --boi-ui: ui-sans-serif, system-ui, -apple-system,
+                BlinkMacSystemFont, "Segoe UI", Inter, Arial, sans-serif;
+        }
+
+        .stApp {
+            background: var(--boi-page);
         }
 
         .block-container {
-            max-width: 1180px;
-            padding-top: 2.1rem;
-            padding-bottom: 3rem;
+            max-width: 1280px;
+            padding-top: 1rem;
+            padding-bottom: 3.25rem;
+            background: var(--boi-paper);
         }
 
         [data-testid="stSidebar"] {
             display: none;
         }
 
-        h1, h2, h3, p, div, span, label {
+        h1, h2, h3, p, div, span, label, button, input {
             letter-spacing: 0;
+            font-family: var(--boi-ui);
+        }
+
+        a {
+            color: var(--boi-navy);
         }
 
         .boi-topbar {
@@ -919,8 +942,10 @@ def apply_library_styles():
             align-items: center;
             column-gap: clamp(0.8rem, 2vw, 1.5rem);
             border-bottom: 1px solid var(--boi-line);
-            padding: 0.2rem 0 0.9rem;
-            margin-bottom: 1.85rem;
+            min-height: 68px;
+            padding: 0.25rem 0;
+            margin-bottom: 0;
+            background: var(--boi-paper);
         }
 
         .boi-brand {
@@ -930,8 +955,8 @@ def apply_library_styles():
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
-            font-size: clamp(0.96rem, 1.35vw, 1.18rem);
-            font-weight: 650;
+            font-size: clamp(1rem, 1.28vw, 1.22rem);
+            font-weight: 700;
             line-height: 1.2;
         }
 
@@ -941,9 +966,10 @@ def apply_library_styles():
             justify-content: flex-end;
             flex-wrap: nowrap;
             min-width: max-content;
-            gap: clamp(0.5rem, 1vw, 0.95rem);
+            gap: clamp(0.72rem, 1.5vw, 1.6rem);
             color: var(--boi-muted);
-            font-size: clamp(0.78rem, 0.95vw, 0.94rem);
+            font-size: clamp(0.82rem, 0.95vw, 1rem);
+            font-weight: 650;
             line-height: 1.45;
             white-space: nowrap;
         }
@@ -953,32 +979,40 @@ def apply_library_styles():
         }
 
         .boi-nav span:first-child {
-            color: var(--boi-accent);
+            color: var(--boi-navy);
             font-weight: 650;
         }
 
         .boi-library-head {
             display: grid;
-            grid-template-columns: minmax(0, 1.8fr) minmax(280px, 0.9fr);
-            gap: 3.6rem;
+            grid-template-columns: minmax(0, 760px) minmax(290px, 340px);
+            justify-content: center;
+            gap: clamp(2rem, 5vw, 5rem);
             align-items: start;
-            margin-bottom: 1.25rem;
+            padding: 4.8rem 0 2.3rem;
+            margin-bottom: 0.5rem;
         }
 
         .boi-kicker {
             color: var(--boi-muted);
-            font-size: 0.9rem;
-            font-weight: 650;
+            font-size: 0.82rem;
+            font-weight: 750;
             margin-bottom: 0.45rem;
             text-transform: uppercase;
         }
 
         .boi-page-title {
-            color: var(--boi-ink);
-            font-size: clamp(2.2rem, 5vw, 4.4rem);
-            font-weight: 500;
-            line-height: 1.03;
-            margin: 0 0 1.35rem;
+            color: var(--boi-muted);
+            font-size: clamp(1.45rem, 2.1vw, 1.85rem);
+            font-weight: 750;
+            line-height: 1.2;
+            margin: 0 0 1.7rem;
+        }
+
+        h1.boi-page-title {
+            color: var(--boi-muted) !important;
+            font-size: clamp(1.45rem, 2.1vw, 1.85rem) !important;
+            line-height: 1.2 !important;
         }
 
         .boi-language-toggle {
@@ -987,9 +1021,10 @@ def apply_library_styles():
             gap: 0.5rem;
             border: 1px solid var(--boi-line);
             border-radius: 999px;
-            padding: 0.28rem 0.65rem;
+            padding: 0.3rem 0.7rem;
             color: var(--boi-muted);
-            font-size: 0.92rem;
+            font-size: 0.82rem;
+            background: var(--boi-paper);
         }
 
         .boi-language-toggle strong {
@@ -998,54 +1033,76 @@ def apply_library_styles():
         }
 
         .boi-shelf {
-            border-top: 1px solid var(--boi-line);
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            column-gap: 1.6rem;
+            row-gap: 2rem;
+            border-top: 0;
             margin-top: 1.2rem;
         }
 
         .boi-shelf-item {
             display: grid;
-            grid-template-columns: minmax(180px, 0.8fr) minmax(0, 1.35fr) auto;
-            gap: 1.4rem;
+            grid-template-columns: 1fr;
+            gap: 0.55rem;
             align-items: start;
-            border-bottom: 1px solid var(--boi-line);
-            padding: 1.15rem 0;
+            border-bottom: 0;
+            padding: 0;
+        }
+
+        .boi-shelf-item::before {
+            content: "";
+            display: block;
+            height: 4px;
+            width: 100%;
+            margin-bottom: 0.55rem;
+            background: var(--boi-teal);
+        }
+
+        .boi-shelf-item:nth-child(2)::before {
+            background: var(--boi-blue);
+        }
+
+        .boi-shelf-item:nth-child(3)::before {
+            background: var(--boi-gold);
         }
 
         .boi-shelf-title {
-            color: var(--boi-link);
-            font-size: 1.45rem;
-            font-weight: 500;
+            color: var(--boi-ink);
+            font-family: var(--boi-serif);
+            font-size: clamp(1.45rem, 2vw, 1.82rem);
+            font-weight: 400;
             line-height: 1.15;
         }
 
         .boi-shelf-copy {
             color: var(--boi-muted);
             font-size: 0.98rem;
-            line-height: 1.52;
+            line-height: 1.42;
         }
 
         .boi-shelf-count {
-            color: var(--boi-ink);
-            font-size: 0.92rem;
+            color: var(--boi-muted);
+            font-size: 0.86rem;
             font-weight: 650;
             white-space: nowrap;
         }
 
         .boi-info-panel {
             border-top: 1px solid var(--boi-line);
-            border-bottom: 1px solid var(--boi-line);
-            padding: 1rem 0 1.15rem;
+            border-bottom: 0;
+            padding: 1.25rem 0 0;
         }
 
         .boi-info-panel + .boi-info-panel {
-            margin-top: 1.4rem;
+            margin-top: 1.65rem;
         }
 
         .boi-panel-title {
-            color: var(--boi-ink);
-            font-size: 1.2rem;
-            font-weight: 600;
-            margin-bottom: 0.45rem;
+            color: var(--boi-muted);
+            font-size: clamp(1.25rem, 1.8vw, 1.55rem);
+            font-weight: 750;
+            margin-bottom: 0.9rem;
         }
 
         .boi-panel-copy, .boi-panel-list {
@@ -1067,26 +1124,100 @@ def apply_library_styles():
 
         .boi-section-title {
             color: var(--boi-ink);
-            font-size: 1.75rem;
-            font-weight: 550;
+            font-size: 1.45rem;
+            font-weight: 750;
             margin: 0 0 0.6rem;
+        }
+
+        h2.boi-section-title {
+            color: var(--boi-ink) !important;
+            font-size: 1.45rem !important;
+            line-height: 1.2 !important;
         }
 
         div[data-testid="stSegmentedControl"] {
             margin: 0.75rem 0 0.2rem;
         }
 
+        div[data-testid="stButtonGroup"] {
+            margin: 0.75rem 0 0.2rem;
+        }
+
+        div[data-testid="stButtonGroup"] button {
+            border-color: var(--boi-line) !important;
+            background: var(--boi-paper) !important;
+            color: var(--boi-ink) !important;
+        }
+
+        div[data-testid="stButtonGroup"]
+        button[data-testid="stBaseButton-segmented_controlActive"] {
+            border-color: var(--boi-navy) !important;
+            background: rgba(23, 52, 91, 0.08) !important;
+            color: var(--boi-navy) !important;
+        }
+
+        div[data-testid="stButtonGroup"]
+        button[data-testid="stBaseButton-segmented_controlActive"] p {
+            color: var(--boi-navy) !important;
+        }
+
         div[data-testid="stMetric"] {
-            background: var(--boi-bg-soft);
-            border: 1px solid #e7e1d7;
-            border-radius: 8px;
+            background: var(--boi-paper);
+            border: 1px solid var(--boi-line);
+            border-radius: 6px;
             padding: 0.75rem 0.9rem;
         }
 
+        div[data-testid="stTextInput"] input,
+        div[data-testid="stSelectbox"] div[data-baseweb="select"] > div,
+        div[data-testid="stMultiSelect"] div[data-baseweb="select"] > div {
+            background: var(--boi-search);
+            border-color: transparent;
+            border-radius: 18px;
+        }
+
+        .stButton > button,
+        .stDownloadButton > button,
+        div[data-testid="stLinkButton"] a {
+            border-radius: 4px;
+            border-color: var(--boi-navy);
+        }
+
+        .stButton > button[kind="primary"],
+        .stDownloadButton > button[kind="primary"],
+        div[data-testid="stLinkButton"] a {
+            background: var(--boi-navy);
+            color: white;
+            box-shadow: rgba(0, 0, 0, 0.18) 0 2px 6px;
+        }
+
+        .stButton > button:hover,
+        .stDownloadButton > button:hover,
+        div[data-testid="stLinkButton"] a:hover {
+            border-color: var(--boi-navy-hover);
+            color: var(--boi-navy-hover);
+        }
+
+        .stButton > button[kind="primary"]:hover,
+        .stDownloadButton > button[kind="primary"]:hover,
+        div[data-testid="stLinkButton"] a:hover {
+            background: var(--boi-navy-hover);
+            color: white;
+        }
+
+        div[data-testid="stDataFrame"],
+        div[data-testid="stDataEditor"] {
+            border-color: var(--boi-line);
+        }
+
         @media (max-width: 820px) {
-            .boi-library-head,
-            .boi-shelf-item {
+            .boi-library-head {
                 display: block;
+                padding-top: 2.5rem;
+            }
+
+            .boi-shelf {
+                grid-template-columns: 1fr;
             }
 
             .boi-nav {
