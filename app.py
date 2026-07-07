@@ -908,20 +908,21 @@ def render_catalog_section(catalog):
 
     st.markdown(f"**{len(view):,}** documents match.")
 
-    display = view[["source_title", "doc_title", "doc_type", "lastmod",
-                    "doc_url"]].copy()
+    display = view[["source_title", "doc_type", "lastmod", "doc_url"]].copy()
     display.insert(0, "select", False)
     edited = st.data_editor(
         display, hide_index=True, width="stretch", height=420,
         column_config={
             "select": st.column_config.CheckboxColumn("✓", width="small"),
             "source_title": "Publication",
-            "doc_title": "Link text",
             "doc_type": st.column_config.TextColumn("Type", width="small"),
             "lastmod": st.column_config.TextColumn("Updated", width="medium"),
-            "doc_url": st.column_config.LinkColumn("URL"),
+            "doc_url": st.column_config.LinkColumn(
+                "Link text",
+                display_text="Link text",
+                width="medium"),
         },
-        disabled=["source_title", "doc_title", "doc_type", "lastmod", "doc_url"],
+        disabled=["source_title", "doc_type", "lastmod", "doc_url"],
         key="catalog_editor")
 
     chosen = edited[edited["select"]]["doc_url"].tolist()
@@ -1024,7 +1025,7 @@ def render_reader_section(catalog, directives):
             f"{len(pdf_catalog):,}-PDF catalog.")
         if not reader_view.empty:
             preview = reader_view[[
-                "source_title", "doc_title", "section", "pages", "lastmod",
+                "source_title", "section", "pages", "lastmod",
                 "full_text_matches", "matched_terms", "search_snippet",
                 "doc_url"
             ]].copy()
@@ -1035,7 +1036,6 @@ def render_reader_section(catalog, directives):
                 height=380,
                 column_config={
                     "source_title": "Publication",
-                    "doc_title": "Link text",
                     "section": "Section",
                     "pages": st.column_config.NumberColumn("Pages", width="small"),
                     "lastmod": st.column_config.TextColumn("Updated", width="medium"),
@@ -1043,7 +1043,10 @@ def render_reader_section(catalog, directives):
                         "Text hits", width="small"),
                     "matched_terms": "Terms",
                     "search_snippet": "Snippet",
-                    "doc_url": st.column_config.LinkColumn("URL"),
+                    "doc_url": st.column_config.LinkColumn(
+                        "Link text",
+                        display_text="Link text",
+                        width="medium"),
                 })
             st.download_button(
                 "Download search results (CSV)",
