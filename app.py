@@ -17,6 +17,7 @@ import sys
 import time
 
 import pandas as pd
+import pydeck as pdk
 import streamlit as st
 
 from boi_pdf_viewer import build_pdf_viewer_model, download_pdf, render_pdf_viewer
@@ -149,6 +150,122 @@ SECTION_LABELS = {
 }
 
 
+REGIONAL_BANKING_MARKETS = (
+    {
+        "country": "Israel",
+        "code": "IL",
+        "latitude": 31.78,
+        "longitude": 35.22,
+        "regulator": "Bank of Israel",
+        "role": "Indexed BOI corpus",
+    },
+    {
+        "country": "Jordan",
+        "code": "JO",
+        "latitude": 31.95,
+        "longitude": 35.93,
+        "regulator": "Central Bank of Jordan",
+        "role": "Comparison target",
+    },
+    {
+        "country": "Egypt",
+        "code": "EG",
+        "latitude": 30.04,
+        "longitude": 31.24,
+        "regulator": "Central Bank of Egypt",
+        "role": "Comparison target",
+    },
+    {
+        "country": "Saudi Arabia",
+        "code": "SA",
+        "latitude": 24.71,
+        "longitude": 46.67,
+        "regulator": "Saudi Central Bank",
+        "role": "Comparison target",
+    },
+    {
+        "country": "United Arab Emirates",
+        "code": "AE",
+        "latitude": 24.45,
+        "longitude": 54.38,
+        "regulator": "Central Bank of the UAE",
+        "role": "Comparison target",
+    },
+    {
+        "country": "Qatar",
+        "code": "QA",
+        "latitude": 25.29,
+        "longitude": 51.53,
+        "regulator": "Qatar Central Bank",
+        "role": "Comparison target",
+    },
+    {
+        "country": "Bahrain",
+        "code": "BH",
+        "latitude": 26.22,
+        "longitude": 50.58,
+        "regulator": "Central Bank of Bahrain",
+        "role": "Comparison target",
+    },
+    {
+        "country": "Kuwait",
+        "code": "KW",
+        "latitude": 29.38,
+        "longitude": 47.98,
+        "regulator": "Central Bank of Kuwait",
+        "role": "Comparison target",
+    },
+    {
+        "country": "Oman",
+        "code": "OM",
+        "latitude": 23.59,
+        "longitude": 58.41,
+        "regulator": "Central Bank of Oman",
+        "role": "Comparison target",
+    },
+    {
+        "country": "Turkey",
+        "code": "TR",
+        "latitude": 39.93,
+        "longitude": 32.86,
+        "regulator": "Central Bank of the Republic of Turkey",
+        "role": "Comparison target",
+    },
+    {
+        "country": "Lebanon",
+        "code": "LB",
+        "latitude": 33.89,
+        "longitude": 35.50,
+        "regulator": "Banque du Liban",
+        "role": "Comparison target",
+    },
+    {
+        "country": "Iraq",
+        "code": "IQ",
+        "latitude": 33.31,
+        "longitude": 44.36,
+        "regulator": "Central Bank of Iraq",
+        "role": "Comparison target",
+    },
+    {
+        "country": "Palestinian Territories",
+        "code": "PS",
+        "latitude": 31.90,
+        "longitude": 35.20,
+        "regulator": "Palestine Monetary Authority",
+        "role": "Comparison target",
+    },
+    {
+        "country": "Cyprus",
+        "code": "CY",
+        "latitude": 35.17,
+        "longitude": 33.36,
+        "regulator": "Central Bank of Cyprus",
+        "role": "Comparison target",
+    },
+)
+
+
 PUBLICATION_TYPE_RULES = (
     (r"\bproper conduct directive\b|proper conduct of banking business",
      "Proper Conduct Directives"),
@@ -203,6 +320,124 @@ def with_publication_type(df):
         return result
     result["publication_type"] = result.apply(classify_publication_type, axis=1)
     return result
+
+
+def build_regional_map_data(reader_view, query):
+    rows = []
+    israel_matches = len(reader_view) if reader_view is not None else 0
+    israel_hits = 0
+    if reader_view is not None and not reader_view.empty:
+        if "full_text_matches" in reader_view.columns:
+            israel_hits = int(reader_view["full_text_matches"].fillna(0).sum())
+
+    for market in REGIONAL_BANKING_MARKETS:
+        row = dict(market)
+        if market["country"] == "Israel":
+            row["publication_matches"] = israel_matches
+            row["text_hits"] = israel_hits
+            row["coverage"] = (
+                f"{israel_matches:,} matching BOI PDFs"
+                if str(query or "").strip()
+                else f"{israel_matches:,} BOI PDFs in catalog")
+            row["status"] = "Active local corpus"
+            row["radius"] = min(260000, 76000 + israel_matches * 120)
+            row["fill_color"] = [255, 76, 76, 210]
+            row["line_color"] = [132, 28, 35, 235]
+        else:
+            row["publication_matches"] = 0
+            row["text_hits"] = 0
+            row["coverage"] = "External corpus not connected yet"
+            row["status"] = "Regional comparison target"
+            row["radius"] = 69000
+            row["fill_color"] = [36, 78, 96, 155]
+            row["line_color"] = [19, 48, 58, 210]
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def render_regional_banking_map(reader_view, query):
+    map_data = build_regional_map_data(reader_view, query)
+    layers = [
+        pdk.Layer(
+            "ScatterplotLayer",
+            data=map_data,
+            id="country-markers",
+            get_position="[longitude, latitude]",
+            get_radius="radius",
+            get_fill_color="fill_color",
+            get_line_color="line_color",
+            line_width_min_pixels=1,
+            stroked=True,
+            filled=True,
+            pickable=True,
+            auto_highlight=True,
+        ),
+        pdk.Layer(
+            "TextLayer",
+            data=map_data,
+            id="country-labels",
+            get_position="[longitude, latitude]",
+            get_text="code",
+            get_size=12,
+            get_color=[255, 255, 255, 245],
+            get_text_anchor="'middle'",
+            get_alignment_baseline="'center'",
+        ),
+    ]
+    deck = pdk.Deck(
+        map_style=None,
+        initial_view_state=pdk.ViewState(
+            latitude=31.1,
+            longitude=40.9,
+            zoom=3.25,
+            pitch=0,
+        ),
+        layers=layers,
+        tooltip={
+            "html": (
+                "<b>{country}</b><br/>"
+                "{regulator}<br/>"
+                "{status}<br/>"
+                "{coverage}<br/>"
+                "Text hits: {text_hits}"
+            ),
+            "style": {
+                "backgroundColor": "#172026",
+                "color": "#fffefa",
+                "fontSize": "12px",
+            },
+        },
+    )
+
+    st.markdown("**Regional banking map**")
+    st.caption(
+        "Middle East comparison layer. Israel is linked to the current BOI "
+        "search results; other jurisdictions are ready for external "
+        "publication feeds.")
+    map_state = st.pydeck_chart(
+        deck,
+        height=420,
+        key="regional_banking_map",
+        on_select="rerun",
+        selection_mode="single-object")
+
+    selected_country = None
+    selection = getattr(map_state, "selection", {}) or {}
+    objects = selection.get("objects", {}) if isinstance(selection, dict) else {}
+    picked = objects.get("country-markers", []) if isinstance(objects, dict) else []
+    if picked:
+        selected_country = picked[0].get("country")
+
+    if selected_country:
+        selected = map_data[map_data["country"] == selected_country].iloc[0]
+        st.markdown(
+            f"**{selected['country']}** · {selected['regulator']}  \n"
+            f"{selected['coverage']}")
+    else:
+        israel = map_data[map_data["country"] == "Israel"].iloc[0]
+        st.markdown(
+            f"**Israel active corpus** · {israel['coverage']}  \n"
+            "Click a marker to inspect the target jurisdiction.")
 
 
 def get_pdf_catalog(catalog, directives=None):
@@ -1115,58 +1350,67 @@ def render_reader_section(catalog, directives):
         metric_1.metric("Matching PDFs", f"{len(reader_view):,}")
         metric_2.metric("Full-text hits", f"{total_hits:,}")
         metric_3.metric("Indexed PDFs searched", f"{len(reader_docs):,}")
-        st.caption(
-            f"Search is looking inside the text of {len(reader_docs):,} indexed "
-            f"PDFs. Index the remaining {remaining:,} PDFs to cover the full "
-            f"{len(pdf_catalog):,}-PDF catalog.")
-        if not reader_view.empty:
-            preview = reader_view[[
-                "source_title", "publication_type", "pages", "lastmod",
-                "full_text_matches", "matched_terms", "search_snippet",
-                "doc_url"
-            ]].copy()
-            table_state = st.dataframe(
-                preview,
-                hide_index=True,
-                width="stretch",
-                height=380,
-                key="reader_results_table",
-                on_select="rerun",
-                selection_mode="single-row",
-                column_config={
-                    "source_title": "Publication",
-                    "publication_type": st.column_config.TextColumn(
-                        "Publication type", width="medium"),
-                    "pages": st.column_config.NumberColumn("Pages", width="small"),
-                    "lastmod": st.column_config.TextColumn("Updated", width="medium"),
-                    "full_text_matches": st.column_config.NumberColumn(
-                        "Text hits", width="small"),
-                    "matched_terms": "Terms",
-                    "search_snippet": "Snippet",
-                    "doc_url": st.column_config.LinkColumn(
-                        "Link text",
-                        display_text="Link text",
-                        width="medium"),
-                })
-            selected_rows = table_state.selection.rows
-            if selected_rows and selected_rows[0] < len(preview):
-                clicked_url = preview.iloc[selected_rows[0]]["doc_url"]
-                clicked_matches = reader_view[
-                    reader_view["doc_url"] == clicked_url]
-                if not clicked_matches.empty:
-                    clicked_row = clicked_matches.iloc[0]
-                    clicked_title = (
-                        clicked_row.get("source_title", "")
-                        or clicked_row.get("doc_title", "")
-                        or clicked_url.rsplit("/", 1)[-1])
-                    st.session_state.reader_url = clicked_url
-                    st.session_state.reader_title = clicked_title
-                    st.session_state.reader_initial_query = reader_query.strip()
-            st.download_button(
-                "Download search results (CSV)",
-                preview.to_csv(index=False).encode("utf-8"),
-                "boi_publication_search_results.csv",
-                "text/csv")
+        results_col, map_col = st.columns([2.15, 1], gap="large")
+        with results_col:
+            st.caption(
+                f"Search is looking inside the text of {len(reader_docs):,} "
+                f"indexed PDFs. Index the remaining {remaining:,} PDFs to "
+                f"cover the full {len(pdf_catalog):,}-PDF catalog.")
+            if not reader_view.empty:
+                preview = reader_view[[
+                    "source_title", "publication_type", "pages", "lastmod",
+                    "full_text_matches", "matched_terms", "search_snippet",
+                    "doc_url"
+                ]].copy()
+                table_state = st.dataframe(
+                    preview,
+                    hide_index=True,
+                    width="stretch",
+                    height=420,
+                    key="reader_results_table",
+                    on_select="rerun",
+                    selection_mode="single-row",
+                    column_config={
+                        "source_title": "Publication",
+                        "publication_type": st.column_config.TextColumn(
+                            "Publication type", width="medium"),
+                        "pages": st.column_config.NumberColumn(
+                            "Pages", width="small"),
+                        "lastmod": st.column_config.TextColumn(
+                            "Updated", width="medium"),
+                        "full_text_matches": st.column_config.NumberColumn(
+                            "Text hits", width="small"),
+                        "matched_terms": "Terms",
+                        "search_snippet": "Snippet",
+                        "doc_url": st.column_config.LinkColumn(
+                            "Link text",
+                            display_text="Link text",
+                            width="medium"),
+                    })
+                selected_rows = table_state.selection.rows
+                if selected_rows and selected_rows[0] < len(preview):
+                    clicked_url = preview.iloc[selected_rows[0]]["doc_url"]
+                    clicked_matches = reader_view[
+                        reader_view["doc_url"] == clicked_url]
+                    if not clicked_matches.empty:
+                        clicked_row = clicked_matches.iloc[0]
+                        clicked_title = (
+                            clicked_row.get("source_title", "")
+                            or clicked_row.get("doc_title", "")
+                            or clicked_url.rsplit("/", 1)[-1])
+                        st.session_state.reader_url = clicked_url
+                        st.session_state.reader_title = clicked_title
+                        st.session_state.reader_initial_query = (
+                            reader_query.strip())
+                st.download_button(
+                    "Download search results (CSV)",
+                    preview.to_csv(index=False).encode("utf-8"),
+                    "boi_publication_search_results.csv",
+                    "text/csv")
+        with map_col:
+            render_regional_banking_map(reader_view, reader_query)
+    else:
+        render_regional_banking_map(reader_view, reader_query)
 
     def reader_label(index):
         row = reader_view.loc[index]
