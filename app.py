@@ -1160,6 +1160,7 @@ def render_library_shell(catalog, directives):
     sections = [
         "Catalog",
         "Reader",
+        "Regional Map",
     ]
     _, selector_col, _ = st.columns([1, 2, 1])
     with selector_col:
@@ -1276,6 +1277,39 @@ def render_catalog_section(catalog):
         st.success(f"Extracted {len(chosen)} document(s).")
 
 
+def render_regional_map_section(catalog, directives):
+    render_section_heading("Regional Banking Map")
+    pdf_catalog = get_pdf_catalog(catalog, directives)
+
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Mapped markets", f"{len(REGIONAL_BANKING_MARKETS):,}")
+    m2.metric("BOI PDFs", f"{len(pdf_catalog):,}")
+    m3.metric(
+        "Comparison feeds",
+        f"{len(REGIONAL_BANKING_MARKETS) - 1:,} pending")
+
+    st.caption(
+        "This layer is separated from the Reader. It is the workspace for "
+        "comparing Bank of Israel publications with regional banking "
+        "regulators as additional country corpora are connected.")
+    render_regional_banking_map(pdf_catalog, "")
+
+    markets = build_regional_map_data(pdf_catalog, "")[[
+        "country", "regulator", "role", "coverage"
+    ]].copy()
+    st.dataframe(
+        markets,
+        hide_index=True,
+        width="stretch",
+        height=320,
+        column_config={
+            "country": "Country",
+            "regulator": "Regulator",
+            "role": "Corpus status",
+            "coverage": "Current coverage",
+        })
+
+
 def render_reader_section(catalog, directives):
     render_section_heading("Search Inside All PDFs")
     pdf_catalog = get_pdf_catalog(catalog, directives)
@@ -1350,67 +1384,60 @@ def render_reader_section(catalog, directives):
         metric_1.metric("Matching PDFs", f"{len(reader_view):,}")
         metric_2.metric("Full-text hits", f"{total_hits:,}")
         metric_3.metric("Indexed PDFs searched", f"{len(reader_docs):,}")
-        results_col, map_col = st.columns([2.15, 1], gap="large")
-        with results_col:
-            st.caption(
-                f"Search is looking inside the text of {len(reader_docs):,} "
-                f"indexed PDFs. Index the remaining {remaining:,} PDFs to "
-                f"cover the full {len(pdf_catalog):,}-PDF catalog.")
-            if not reader_view.empty:
-                preview = reader_view[[
-                    "source_title", "publication_type", "pages", "lastmod",
-                    "full_text_matches", "matched_terms", "search_snippet",
-                    "doc_url"
-                ]].copy()
-                table_state = st.dataframe(
-                    preview,
-                    hide_index=True,
-                    width="stretch",
-                    height=420,
-                    key="reader_results_table",
-                    on_select="rerun",
-                    selection_mode="single-row",
-                    column_config={
-                        "source_title": "Publication",
-                        "publication_type": st.column_config.TextColumn(
-                            "Publication type", width="medium"),
-                        "pages": st.column_config.NumberColumn(
-                            "Pages", width="small"),
-                        "lastmod": st.column_config.TextColumn(
-                            "Updated", width="medium"),
-                        "full_text_matches": st.column_config.NumberColumn(
-                            "Text hits", width="small"),
-                        "matched_terms": "Terms",
-                        "search_snippet": "Snippet",
-                        "doc_url": st.column_config.LinkColumn(
-                            "Link text",
-                            display_text="Link text",
-                            width="medium"),
-                    })
-                selected_rows = table_state.selection.rows
-                if selected_rows and selected_rows[0] < len(preview):
-                    clicked_url = preview.iloc[selected_rows[0]]["doc_url"]
-                    clicked_matches = reader_view[
-                        reader_view["doc_url"] == clicked_url]
-                    if not clicked_matches.empty:
-                        clicked_row = clicked_matches.iloc[0]
-                        clicked_title = (
-                            clicked_row.get("source_title", "")
-                            or clicked_row.get("doc_title", "")
-                            or clicked_url.rsplit("/", 1)[-1])
-                        st.session_state.reader_url = clicked_url
-                        st.session_state.reader_title = clicked_title
-                        st.session_state.reader_initial_query = (
-                            reader_query.strip())
-                st.download_button(
-                    "Download search results (CSV)",
-                    preview.to_csv(index=False).encode("utf-8"),
-                    "boi_publication_search_results.csv",
-                    "text/csv")
-        with map_col:
-            render_regional_banking_map(reader_view, reader_query)
-    else:
-        render_regional_banking_map(reader_view, reader_query)
+        st.caption(
+            f"Search is looking inside the text of {len(reader_docs):,} "
+            f"indexed PDFs. Index the remaining {remaining:,} PDFs to "
+            f"cover the full {len(pdf_catalog):,}-PDF catalog.")
+        if not reader_view.empty:
+            preview = reader_view[[
+                "source_title", "publication_type", "pages", "lastmod",
+                "full_text_matches", "matched_terms", "search_snippet",
+                "doc_url"
+            ]].copy()
+            table_state = st.dataframe(
+                preview,
+                hide_index=True,
+                width="stretch",
+                height=420,
+                key="reader_results_table",
+                on_select="rerun",
+                selection_mode="single-row",
+                column_config={
+                    "source_title": "Publication",
+                    "publication_type": st.column_config.TextColumn(
+                        "Publication type", width="medium"),
+                    "pages": st.column_config.NumberColumn(
+                        "Pages", width="small"),
+                    "lastmod": st.column_config.TextColumn(
+                        "Updated", width="medium"),
+                    "full_text_matches": st.column_config.NumberColumn(
+                        "Text hits", width="small"),
+                    "matched_terms": "Terms",
+                    "search_snippet": "Snippet",
+                    "doc_url": st.column_config.LinkColumn(
+                        "Link text",
+                        display_text="Link text",
+                        width="medium"),
+                })
+            selected_rows = table_state.selection.rows
+            if selected_rows and selected_rows[0] < len(preview):
+                clicked_url = preview.iloc[selected_rows[0]]["doc_url"]
+                clicked_matches = reader_view[
+                    reader_view["doc_url"] == clicked_url]
+                if not clicked_matches.empty:
+                    clicked_row = clicked_matches.iloc[0]
+                    clicked_title = (
+                        clicked_row.get("source_title", "")
+                        or clicked_row.get("doc_title", "")
+                        or clicked_url.rsplit("/", 1)[-1])
+                    st.session_state.reader_url = clicked_url
+                    st.session_state.reader_title = clicked_title
+                    st.session_state.reader_initial_query = reader_query.strip()
+            st.download_button(
+                "Download search results (CSV)",
+                preview.to_csv(index=False).encode("utf-8"),
+                "boi_publication_search_results.csv",
+                "text/csv")
 
     def reader_label(index):
         row = reader_view.loc[index]
@@ -1479,5 +1506,7 @@ section = render_library_shell(catalog, directives)
 
 if section == "Catalog":
     render_catalog_section(catalog)
-else:
+elif section == "Reader":
     render_reader_section(catalog, directives)
+else:
+    render_regional_map_section(catalog, directives)
