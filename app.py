@@ -269,6 +269,24 @@ def parse_terms(query):
     return terms
 
 
+def normalize_search_text(text):
+    return re.sub(r"\s+", " ", text).strip().lower()
+
+
+def exact_search_phrase(query):
+    phrase = query.strip()
+    if len(phrase) >= 2 and phrase[0] == '"' and phrase[-1] == '"':
+        phrase = phrase[1:-1]
+    return normalize_search_text(phrase)
+
+
+def search_terms_for_mode(query, match_mode):
+    if match_mode == "Exact match":
+        phrase = exact_search_phrase(query)
+        return [phrase] if phrase else []
+    return parse_terms(query)
+
+
 def find_snippets(text, terms, width=240, limit=3):
     flat = re.sub(r"\s+", " ", text).strip()
     lowered = flat.lower()
@@ -298,15 +316,13 @@ def find_snippets(text, terms, width=240, limit=3):
 
 def search_full_text(docs, terms, match_mode, limit):
     rows = []
-    require_all = match_mode == "All terms"
+    exact_match = match_mode == "Exact match"
     for _, row in docs.iterrows():
         text = row["_text"]
-        lowered = text.lower()
+        lowered = normalize_search_text(text) if exact_match else text.lower()
         counts = {term: lowered.count(term) for term in terms}
         matched = {term: count for term, count in counts.items() if count}
-        if require_all and len(matched) != len(terms):
-            continue
-        if not require_all and not matched:
+        if not matched:
             continue
 
         rows.append({
@@ -356,7 +372,7 @@ def build_reader_results(pdf_catalog, docs, query, limit=200):
 
     full_text_results = pd.DataFrame()
     if not docs.empty:
-        full_text_results = search_full_text(docs, terms, "Any term", limit)
+        full_text_results = search_full_text(docs, terms, "Broad match", limit)
 
     metadata_urls = set(view.loc[metadata_scores > 0, "doc_url"])
     full_text_urls = set(full_text_results["doc_url"]) if not full_text_results.empty else set()
@@ -389,7 +405,7 @@ def build_full_text_pdf_results(pdf_catalog, docs, query, match_mode, limit=500)
         result["search_snippet"] = ""
         return result
 
-    terms = parse_terms(query)
+    terms = search_terms_for_mode(query, match_mode)
     if not terms or docs.empty:
         return pd.DataFrame()
 
@@ -985,13 +1001,13 @@ def render_reader_section(catalog, directives):
         placeholder='stock, inflation, "monetary policy"',
         key="reader_query")
     match_mode = st.segmented_control(
-        "Match terms",
-        ["Any term", "All terms"],
-        default="Any term",
-        key="reader_match_mode",
+        "Match type",
+        ["Exact match", "Broad match"],
+        default="Broad match",
+        key="reader_match_type",
         width="content")
     reader_view = build_full_text_pdf_results(
-        pdf_catalog, reader_docs, reader_query, match_mode or "Any term")
+        pdf_catalog, reader_docs, reader_query, match_mode or "Broad match")
 
     if reader_query.strip():
         total_hits = (
