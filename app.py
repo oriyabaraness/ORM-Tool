@@ -1125,11 +1125,14 @@ def render_reader_section(catalog, directives):
                 "full_text_matches", "matched_terms", "search_snippet",
                 "doc_url"
             ]].copy()
-            st.dataframe(
+            table_state = st.dataframe(
                 preview,
                 hide_index=True,
                 width="stretch",
                 height=380,
+                key="reader_results_table",
+                on_select="rerun",
+                selection_mode="single-row",
                 column_config={
                     "source_title": "Publication",
                     "publication_type": st.column_config.TextColumn(
@@ -1145,6 +1148,20 @@ def render_reader_section(catalog, directives):
                         display_text="Link text",
                         width="medium"),
                 })
+            selected_rows = table_state.selection.rows
+            if selected_rows and selected_rows[0] < len(preview):
+                clicked_url = preview.iloc[selected_rows[0]]["doc_url"]
+                clicked_matches = reader_view[
+                    reader_view["doc_url"] == clicked_url]
+                if not clicked_matches.empty:
+                    clicked_row = clicked_matches.iloc[0]
+                    clicked_title = (
+                        clicked_row.get("source_title", "")
+                        or clicked_row.get("doc_title", "")
+                        or clicked_url.rsplit("/", 1)[-1])
+                    st.session_state.reader_url = clicked_url
+                    st.session_state.reader_title = clicked_title
+                    st.session_state.reader_initial_query = reader_query.strip()
             st.download_button(
                 "Download search results (CSV)",
                 preview.to_csv(index=False).encode("utf-8"),
