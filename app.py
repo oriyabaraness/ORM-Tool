@@ -142,6 +142,69 @@ def file_mtime(path):
     return os.path.getmtime(path) if os.path.exists(path) else 0
 
 
+SECTION_LABELS = {
+    "communication-and-publications": "Communications and Publications",
+    "economic-roles": "Economic Roles",
+    "proper-conduct": "Proper Conduct Directives",
+}
+
+
+PUBLICATION_TYPE_RULES = (
+    (r"\bproper conduct directive\b|proper conduct of banking business",
+     "Proper Conduct Directives"),
+    (r"\bbanking system annual survey\b|israel'?s banking system",
+     "Banking System Surveys"),
+    (r"\bannual report\b", "Annual Reports"),
+    (r"\bmonetary policy report\b|\bmonetary policy committee\b|"
+     r"\binterest rate decision\b|\bpress briefing on monetary policy\b",
+     "Monetary Policy"),
+    (r"\bstaff forecast\b|\binflation forecast\b|\bforecast\b",
+     "Forecasts and Inflation Assessments"),
+    (r"\bfinancial stability\b", "Financial Stability"),
+    (r"\bforeign exchange reserves?\b|\breserves? in\b",
+     "Foreign Exchange Reserves"),
+    (r"\bpayment and settlement\b|\bpayment systems?\b|\bmeans of payment\b",
+     "Payment and Settlement Systems"),
+    (r"\bdiscussion paper\b|\bworking paper\b|\bresearch department\b|"
+     r"\bselected research\b|\bstud(y|ies)\b",
+     "Research and Working Papers"),
+    (r"\bpress release\b|\bremarks by\b|\baddress by\b|\bspeech\b|"
+     r"\bgovernor\b",
+     "Speeches and Press Releases"),
+    (r"\bstatistical appendix\b|\bcomplementary data\b",
+     "Statistical Data"),
+)
+
+
+def section_label(section):
+    section = str(section or "").strip()
+    if not section:
+        return "Other Publications"
+    return SECTION_LABELS.get(section, section.replace("-", " ").title())
+
+
+def classify_publication_type(row):
+    section = str(row.get("section", "") or "").strip()
+    text = " ".join(
+        str(row.get(col, "") or "")
+        for col in ("source_title", "doc_title", "section", "doc_url")
+    ).lower()
+
+    for pattern, label in PUBLICATION_TYPE_RULES:
+        if re.search(pattern, text):
+            return label
+    return section_label(section)
+
+
+def with_publication_type(df):
+    result = df.copy()
+    if result.empty:
+        result["publication_type"] = pd.Series(dtype=str)
+        return result
+    result["publication_type"] = result.apply(classify_publication_type, axis=1)
+    return result
+
+
 def get_pdf_catalog(catalog, directives=None):
     doc_type = catalog["doc_type"].fillna("").astype(str).str.strip().str.lower()
     pdf_catalog = catalog[doc_type == "pdf"].copy()
@@ -164,8 +227,9 @@ def get_pdf_catalog(catalog, directives=None):
             directive_rows["doc_url"].astype(str).str.len() > 0]
         pdf_catalog = pd.concat([pdf_catalog, directive_rows], ignore_index=True)
 
-    return pdf_catalog.drop_duplicates(
+    pdf_catalog = pdf_catalog.drop_duplicates(
         subset=["doc_url"]).reset_index(drop=True)
+    return with_publication_type(pdf_catalog)
 
 
 def read_index_pid():
@@ -426,11 +490,21 @@ def build_full_text_pdf_results(pdf_catalog, docs, query, match_mode, limit=500)
         else:
             results[col] = mapped
 
-    for col in ("source_title", "doc_title", "section", "lastmod", "doc_type"):
+    for col in (
+            "source_title", "doc_title", "section", "publication_type",
+            "lastmod", "doc_type"):
         fill_from_catalog(col)
 
     if "doc_type" not in results.columns:
         results["doc_type"] = "pdf"
+    if "publication_type" not in results.columns:
+        results["publication_type"] = results.apply(
+            classify_publication_type, axis=1)
+    else:
+        missing_type = results["publication_type"].fillna("").astype(str) == ""
+        if missing_type.any():
+            results.loc[missing_type, "publication_type"] = results[
+                missing_type].apply(classify_publication_type, axis=1)
     if "pages" in results.columns:
         results["pages"] = pd.to_numeric(results["pages"], errors="coerce")
     results["full_text_matches"] = results["matches"].fillna(0).astype(int)
@@ -873,6 +947,7 @@ def render_section_heading(title):
 
 def render_catalog_section(catalog):
     render_section_heading("Catalog")
+    catalog = with_publication_type(catalog)
     query = st.text_input(
         "Search title / URL",
         "",
@@ -880,14 +955,16 @@ def render_catalog_section(catalog):
         key="catalog_query")
 
     filter_1, filter_2, filter_3 = st.columns(3)
-    sections = sorted(s for s in catalog["section"].unique() if s)
+    publication_types = sorted(
+        s for s in catalog["publication_type"].unique() if s)
     types = sorted(t for t in catalog["doc_type"].unique() if t)
     only_dated = catalog[catalog["lastmod"] != ""]
     years = (
         sorted({d[:4] for d in only_dated["lastmod"] if len(d) >= 4})
         if not only_dated.empty else [])
     with filter_1:
-        pick_sections = st.multiselect("Section", sections, default=[])
+        pick_publication_types = st.multiselect(
+            "Publication type", publication_types, default=[])
     with filter_2:
         pick_types = st.multiselect("File type", types, default=[])
     with filter_3:
@@ -899,8 +976,8 @@ def render_catalog_section(catalog):
         hay = (view["doc_title"] + " " + view["source_title"] + " "
                + view["doc_url"]).str.lower()
         view = view[hay.str.contains(q, regex=False)]
-    if pick_sections:
-        view = view[view["section"].isin(pick_sections)]
+    if pick_publication_types:
+        view = view[view["publication_type"].isin(pick_publication_types)]
     if pick_types:
         view = view[view["doc_type"].isin(pick_types)]
     if pick_years:
@@ -908,13 +985,17 @@ def render_catalog_section(catalog):
 
     st.markdown(f"**{len(view):,}** documents match.")
 
-    display = view[["source_title", "doc_type", "lastmod", "doc_url"]].copy()
+    display = view[[
+        "source_title", "publication_type", "doc_type", "lastmod", "doc_url"
+    ]].copy()
     display.insert(0, "select", False)
     edited = st.data_editor(
         display, hide_index=True, width="stretch", height=420,
         column_config={
             "select": st.column_config.CheckboxColumn("✓", width="small"),
             "source_title": "Publication",
+            "publication_type": st.column_config.TextColumn(
+                "Publication type", width="medium"),
             "doc_type": st.column_config.TextColumn("Type", width="small"),
             "lastmod": st.column_config.TextColumn("Updated", width="medium"),
             "doc_url": st.column_config.LinkColumn(
@@ -922,7 +1003,10 @@ def render_catalog_section(catalog):
                 display_text="Link text",
                 width="medium"),
         },
-        disabled=["source_title", "doc_type", "lastmod", "doc_url"],
+        disabled=[
+            "source_title", "publication_type", "doc_type", "lastmod",
+            "doc_url"
+        ],
         key="catalog_editor")
 
     chosen = edited[edited["select"]]["doc_url"].tolist()
@@ -1010,6 +1094,18 @@ def render_reader_section(catalog, directives):
         width="content")
     reader_view = build_full_text_pdf_results(
         pdf_catalog, reader_docs, reader_query, match_mode or "Broad match")
+    if not reader_view.empty and "publication_type" in reader_view.columns:
+        reader_publication_types = sorted(
+            s for s in reader_view["publication_type"].unique() if s)
+        pick_reader_publication_types = st.multiselect(
+            "Publication type",
+            reader_publication_types,
+            default=[],
+            key="reader_publication_type_filter")
+        if pick_reader_publication_types:
+            reader_view = reader_view[
+                reader_view["publication_type"].isin(
+                    pick_reader_publication_types)]
 
     if reader_query.strip():
         total_hits = (
@@ -1025,7 +1121,7 @@ def render_reader_section(catalog, directives):
             f"{len(pdf_catalog):,}-PDF catalog.")
         if not reader_view.empty:
             preview = reader_view[[
-                "source_title", "section", "pages", "lastmod",
+                "source_title", "publication_type", "pages", "lastmod",
                 "full_text_matches", "matched_terms", "search_snippet",
                 "doc_url"
             ]].copy()
@@ -1036,7 +1132,8 @@ def render_reader_section(catalog, directives):
                 height=380,
                 column_config={
                     "source_title": "Publication",
-                    "section": "Section",
+                    "publication_type": st.column_config.TextColumn(
+                        "Publication type", width="medium"),
                     "pages": st.column_config.NumberColumn("Pages", width="small"),
                     "lastmod": st.column_config.TextColumn("Updated", width="medium"),
                     "full_text_matches": st.column_config.NumberColumn(
