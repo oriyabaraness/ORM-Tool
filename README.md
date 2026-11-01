@@ -31,3 +31,38 @@ To add more PDFs to the searchable full-text corpus:
 ```bash
 python boi_pdf_text.py
 ```
+
+## Risk Compare (Israel vs Jordan POC)
+
+The **Risk Compare** section lines up Bank of Israel and Central Bank of Jordan
+regulation against one risk taxonomy (`orm/taxonomy.py`): governance,
+operational resilience, outsourcing, IT/cyber, incident reporting, AML,
+conduct, plus prudential categories.
+
+It shows:
+
+- **Coverage matrix** – category × country, with how deep the coverage is
+  (provisions indexed / mapped from titles only / nothing found).
+- **Side by side** – both countries' documents and tagged provisions for one
+  category, with extracted deadlines (⏱) and review frequencies (↻).
+- **Gap analysis** – baseline expectations per ORM category (e.g. "recovery
+  time objectives", "exit strategy for outsourcing") marked found / not found /
+  not assessed per country, with the evidencing provision.
+- **Deadlines** – every "within N hours/days" obligation, normalized to hours.
+
+The index lives in `orm.db` (SQLite, git-ignored). The app builds it from the
+CSV indexes on first open. To pull the regulation text:
+
+```bash
+python orm_pipeline.py build --fetch          # download + extract PDFs, tag everything
+python orm_pipeline.py status --missing       # what still has no text
+python orm_pipeline.py classify               # re-tag after editing the taxonomy
+```
+
+Most CBJ entries have no direct PDF link. Run `python jordan_cbj_index.py`
+to try scraping them, or save a PDF from the CBJ site as
+`orm_texts/manual/<document id>.pdf` (ids come from `status --missing`).
+
+Code layout: `orm/` (taxonomy, db, sources, extract, classify, pipeline,
+queries), `orm_compare.py` (the Streamlit view), `tests/test_orm.py`
+(`python -m pytest tests`).

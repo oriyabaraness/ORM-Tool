@@ -15,7 +15,7 @@ This file is for styling and BOI project implementation only.
 - Do not hardcode original-domain copy from the reference screenshot.
 - Do use Bank of Israel / regulatory-publication language where component examples need labels.
 - Keep the top navigation visible at 100% zoom: **Catalog**, **Directives**, **Reader**, **Search**.
-- Keep the current Library segmented control items as **Catalog**, **Reader**, and **Regional Map**.
+- Keep the current Library segmented control items as **Catalog**, **Reader**, **Regional Map**, and **Risk Compare**.
 - Do not add a separate **Proper Conduct of Banking Business Directives** tab; that content belongs inside the Reader/searchable publication experience.
 - Treat **Reader** as the single place for searchable PDFs, extracted text, highlighted matches, page navigation, and downloadable source PDFs.
 - Treat **Regional Map** as the separate comparison workspace for Israel, Jordan, and future regional central bank corpora.
@@ -25,10 +25,11 @@ This file is for styling and BOI project implementation only.
 This design file reflects the current Streamlit application surface as of the Jordan connection pass.
 
 - **Top visual navigation:** Catalog, Directives, Reader, Search.
-- **Library tabs:** Catalog, Reader, Regional Map.
+- **Library tabs:** Catalog, Reader, Regional Map, Risk Compare.
 - **Catalog:** searchable/filterable BOI publication metadata, publication type filter, file type filter, year filter, official link column, extraction actions, and CSV download.
 - **Reader:** all-PDF full-text search, exact/broad match toggle, publication type filter, matching publication table, reader opener, source PDF download, synchronized PDF and extracted-text/legal-analysis viewer.
 - **Regional Map:** Middle East banking map, active BOI corpus, connected Central Bank of Jordan regulation index, pending regional corpora, market status table, Jordan regulation search, official CBJ links, and CSV download.
+- **Risk Compare:** Israel vs Jordan coverage matrix by risk category, side-by-side provisions, gap analysis against baseline expectations, and extracted deadlines. Uses the same paper/navy/rule styling; category rules teal (Israel) and rose (Jordan).
 - **Proper Conduct directives:** available through Reader/search workflows and catalog metadata; do not restore the older redundant directive-only Library tab.
 
 ## Page Structure

@@ -7,3 +7,8 @@ __pycache__/
 *.local.csv
 boi_texts/*.txt.gz
 .streamlit/
+
+# Risk Compare index (rebuilt from the CSV indexes)
+orm.db
+orm_texts/*.txt.gz
+orm_texts/manual/

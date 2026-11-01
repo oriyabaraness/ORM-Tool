@@ -22,6 +22,7 @@ import streamlit as st
 
 from boi_pdf_viewer import build_pdf_viewer_model, download_pdf, render_pdf_viewer
 from boi_pdf_text import extract_one, slug_for
+from orm_compare import render_risk_compare_section
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 LINKS = os.path.join(HERE, "boi_pdf_links.csv")
@@ -1316,6 +1317,7 @@ def render_library_shell(catalog, directives):
         "Catalog",
         "Reader",
         "Regional Map",
+        "Risk Compare",
     ]
     _, selector_col, _ = st.columns([1, 2, 1])
     with selector_col:
@@ -1725,5 +1727,7 @@ if section == "Catalog":
     render_catalog_section(catalog)
 elif section == "Reader":
     render_reader_section(catalog, directives)
+elif section == "Risk Compare":
+    render_risk_compare_section()
 else:
     render_regional_map_section(catalog, directives)
