@@ -11,7 +11,7 @@ import re
 
 import streamlit as st
 
-from orm import classify, db, pipeline, queries, taxonomy
+from orm import classify, db, match, pipeline, queries, taxonomy
 
 J = queries.JURISDICTIONS
 NAMES = queries.JURISDICTION_NAMES
@@ -70,6 +70,21 @@ CSS = """
 .orm-pill.not-found {background: #f8e6ea; color: #9b2f4a;}
 .orm-pill.not-assessed {background: #ececea; color: #666;}
 .orm-ev {color: #666; font-size: 12px; margin-top: 4px;}
+.orm-doc-group {font-size: 13px; color: #444; margin: 14px 0 6px 0; padding-top: 8px;
+    border-top: 1px solid #ddddda;}
+.orm-doc-group .ref {color: #17345b; font-weight: 600; margin-right: 6px;}
+.orm-selected {background: #fff; border: 1px solid #ddddda; border-left: 4px solid #17345b;
+    border-radius: 6px; padding: 14px 16px; font-family: Georgia, serif; font-size: 16px;
+    line-height: 1.6; margin-bottom: 22px;}
+.orm-selected .head, .orm-match .head {font-family: system-ui, sans-serif;
+    font-size: 12px; color: #666; margin-bottom: 6px;}
+.orm-selected .head b, .orm-match .head b {color: #17345b;}
+.orm-selected mark, .orm-match mark {background: #fff3bf;}
+.orm-match {background: #fafafa; border: 1px solid #ececea; border-radius: 6px;
+    padding: 12px 14px; margin: 10px 0; font-size: 14px; line-height: 1.5;}
+.orm-match .bar {height: 3px; background: #ececea; border-radius: 2px; margin-bottom: 8px;}
+.orm-match .bar span {display: block; height: 3px; background: #9b2f4a; border-radius: 2px;}
+.orm-match .strength {float: right; font-weight: 600; color: #9b2f4a;}
 </style>
 """
 
@@ -235,6 +250,113 @@ def render_deadlines(conn, category_id: str) -> None:
                        "doc_title": "Document"})
 
 
+# --- clause explorer ------------------------------------------------------------
+
+def _short(text: str, n: int = 110) -> str:
+    text = " ".join(text.split())
+    return text if len(text) <= n else text[:n].rsplit(" ", 1)[0] + "…"
+
+
+def _source_link(row) -> str:
+    link = row.get("pdf_url") or row.get("url")
+    return (f' · <a href="{_e(link)}" target="_blank">open source ↗</a>'
+            if link else "")
+
+
+def render_clause_explorer(conn, country: str, category_id: str) -> None:
+    """Pick a clause on the left; its equivalents in the other countries
+    appear on the right."""
+    others = [j for j in J if j != country]
+    query = st.text_input("Filter clauses", "", key="orm_clause_query",
+                          placeholder="e.g. notify, exit strategy, 24 hours")
+    rows = queries.clauses(conn, country, category_id, query=query)
+
+    if rows.empty:
+        docs = queries.category_documents(conn, category_id, country)
+        if query.strip():
+            msg = "No clauses match this filter."
+        elif docs.empty:
+            msg = (f"{NAMES[country]} has no documents mapped to this category.")
+        else:
+            msg = (f"{NAMES[country]} has {len(docs)} document"
+                   f"{'s' if len(docs) != 1 else ''} in this category, but their "
+                   "text hasn't been extracted yet, so there are no clauses to "
+                   "click. Run <code>python orm_pipeline.py build --fetch</code>.")
+        st.markdown(f'<div class="orm-note">{msg}</div>', unsafe_allow_html=True)
+        return
+
+    ids = rows["provision_id"].tolist()
+    key = f"orm_clause_{country}_{category_id}"
+    if st.session_state.get(key) not in ids:
+        st.session_state[key] = ids[0]
+    selected_id = st.session_state[key]
+
+    left, right = st.columns([5, 6], gap="large")
+    with left:
+        st.markdown(f'<div class="orm-col-head {country}">{NAMES[country]} · '
+                    f'{len(rows)} clause{"s" if len(rows) != 1 else ""}</div>',
+                    unsafe_allow_html=True)
+        with st.container(height=680, border=False):
+            for doc_id, group in rows.groupby("document_id", sort=False):
+                first = group.iloc[0]
+                st.markdown(
+                    f'<div class="orm-doc-group"><span class="ref">'
+                    f'{_e(first["doc_ref"])}</span>{_e(first["doc_title"])}</div>',
+                    unsafe_allow_html=True)
+                for _, c in group.iterrows():
+                    pid = int(c["provision_id"])
+                    n = int(c["matches"])
+                    label = (f'{c["ref"] or "¶"}  {_short(c["text"], 95)}'
+                             f'  ·  {n} match{"es" if n != 1 else ""}')
+                    label = re.sub(r"[*_`\[\]#<>$~|]", "", label)
+                    if st.button(label, key=f"orm_btn_{pid}", width="stretch",
+                                 type="primary" if pid == selected_id else "secondary"):
+                        st.session_state[key] = pid
+                        st.rerun()
+
+    with right:
+        clause = queries.clause(conn, selected_id)
+        st.markdown(
+            f'<div class="orm-selected"><div class="head"><b>'
+            f'{_e(clause["doc_ref"] or clause["doc_title"])}</b> {_e(clause["ref"])}'
+            f' · {_e(clause["doc_title"])}{_source_link(clause)}</div>'
+            f'{_highlight(clause["text"], classify.matched_keywords(category_id, clause["text"]), limit=1600)}'
+            f'</div>', unsafe_allow_html=True)
+
+        matches = queries.equivalents(conn, selected_id, category_id)
+        for j in others:
+            st.markdown(f'<div class="orm-col-head {j}">Equivalent in {NAMES[j]}</div>',
+                        unsafe_allow_html=True)
+            mj = matches[matches["jurisdiction"] == j]
+            if mj.empty:
+                if not queries.has_text_in_category(conn, j, category_id):
+                    msg = (f"{NAMES[j]} has no extracted text in this category yet, "
+                           "so it can't be compared.")
+                else:
+                    msg = (f"No comparable clause found in {NAMES[j]}. "
+                           "This may be a gap worth reviewing.")
+                st.markdown(f'<div class="orm-note">{msg}</div>', unsafe_allow_html=True)
+                continue
+            cards = []
+            for _, m in mj.iterrows():
+                strength = match.strength(m["score"])
+                width = max(6, min(100, int(m["score"] * 160)))
+                why = "".join(f'<span class="orm-chip">✓ {_e(x)}</span>'
+                              for x in m["shared_expectation_labels"])
+                terms = (f'<div class="orm-ev">Shared terms: {_e(m["shared_terms"])}</div>'
+                         if m["shared_terms"] else "")
+                cards.append(
+                    f'<div class="orm-match"><div class="bar"><span style="width:{width}%">'
+                    f'</span></div><div class="head"><b>{_e(m["doc_ref"] or m["doc_title"])}'
+                    f'</b> {_e(m["ref"])} · {_e(m["doc_title"])}{_source_link(m)}'
+                    f'<span class="strength">{strength}</span></div>'
+                    f'{_highlight(m["text"], [], limit=900)}<div>{why}</div>{terms}</div>')
+            st.markdown("".join(cards), unsafe_allow_html=True)
+        st.caption("Matches are suggested by text similarity and shared baseline "
+                   "expectations within the same risk category. Confirm before "
+                   "relying on them.")
+
+
 # --- section ------------------------------------------------------------------
 
 def render_risk_compare_section(path: str | None = None) -> None:
@@ -260,32 +382,35 @@ def render_risk_compare_section(path: str | None = None) -> None:
         st.markdown(f'<div class="orm-status">{"".join(parts)}</div>',
                     unsafe_allow_html=True)
 
-        c1, c2 = st.columns([3, 1])
+        c1, c2, c3, c4 = st.columns([2, 3, 2, 1.3], vertical_alignment="bottom")
         with c1:
+            country = st.selectbox("Country", list(J), format_func=NAMES.get,
+                                   key="orm_country")
+        with c3:
             orm_only = st.toggle("ORM core categories only", value=True,
                                  key="orm_core_only")
+        counts = queries.category_counts(conn, country)
+        options = [c.id for c in taxonomy.CATEGORIES if c.orm_core or not orm_only]
         with c2:
+            category_id = st.selectbox(
+                "Risk management category", options, key="orm_category",
+                format_func=lambda cid: (f"{taxonomy.BY_ID[cid].name}  ·  "
+                                         f"{counts.get(cid, 0)} clauses"))
+        with c4:
             if st.button("Rebuild index", width="stretch",
                          help="Re-reads the source indexes and any cached text, "
-                              "then re-tags everything. Does not download PDFs."):
+                              "then re-tags and re-matches everything. Does not "
+                              "download PDFs."):
                 with st.spinner("Rebuilding…"):
                     pipeline.build(path, fetch=False)
                 st.rerun()
-
-        matrix = queries.coverage_matrix(conn, orm_only=orm_only)
-        render_matrix(matrix)
-        st.download_button(
-            "Download matrix (CSV)", matrix.to_csv(index=False).encode("utf-8"),
-            "risk_coverage_matrix.csv", "text/csv")
-
-        st.markdown('<div class="boi-section-rule"></div>', unsafe_allow_html=True)
-        options = matrix["category_id"].tolist()
-        category_id = st.selectbox(
-            "Category", options,
-            format_func=lambda cid: taxonomy.BY_ID[cid].name, key="orm_category")
         st.caption(taxonomy.BY_ID[category_id].description)
 
-        side, gap, dl = st.tabs(["Side by side", "Gap analysis", "Deadlines"])
+        explorer, side, gap, dl, overview = st.tabs(
+            ["Clause explorer", "Side by side", "Gap analysis", "Deadlines",
+             "Coverage matrix"])
+        with explorer:
+            render_clause_explorer(conn, country, category_id)
         with side:
             query = st.text_input("Search within this category", "",
                                   placeholder="e.g. notify, outsourcing, 24 hours",
@@ -298,3 +423,9 @@ def render_risk_compare_section(path: str | None = None) -> None:
             render_gap_table(conn, category_id)
         with dl:
             render_deadlines(conn, category_id)
+        with overview:
+            matrix = queries.coverage_matrix(conn, orm_only=orm_only)
+            render_matrix(matrix)
+            st.download_button(
+                "Download matrix (CSV)", matrix.to_csv(index=False).encode("utf-8"),
+                "risk_coverage_matrix.csv", "text/csv")

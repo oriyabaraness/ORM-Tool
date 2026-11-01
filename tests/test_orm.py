@@ -223,6 +223,8 @@ def _fake_streamlit(rendered):
     st.download_button = lambda *a, **k: None
     st.dataframe = lambda df, **_: rendered.append(df.to_string())
     st.rerun = lambda: None
+    st.container = lambda *a, **k: _Ctx()
+    st.session_state = {}
     st.column_config = types.SimpleNamespace(NumberColumn=lambda *a, **k: None)
     return st
 
@@ -239,3 +241,30 @@ def test_risk_compare_section_renders(built_db, monkeypatch):
     assert "<mark>recovery</mark>" in page.lower() or "<mark>Recovery</mark>" in page
     assert "within 24 hours" in page
     assert "not found" in page
+    assert "Equivalent in Jordan" in page
+    assert "Article 1" in page
+
+
+def test_clause_matching_pairs_equivalent_clauses(built_db):
+    with db.session(built_db) as conn:
+        il = queries.clauses(conn, "IL", "op_resilience")
+        bcp = il[il["text"].str.contains("business continuity plan")].iloc[0]
+        eq = queries.equivalents(conn, int(bcp["provision_id"]), "op_resilience")
+        assert not eq.empty
+        best = eq.iloc[0]
+        assert best["jurisdiction"] == "JO" and best["ref"] == "Article 1"
+        assert "Documented business continuity plan" in best["shared_expectation_labels"]
+        # and the reverse direction exists too
+        jo = queries.clauses(conn, "JO", "op_resilience")
+        assert (jo["matches"] > 0).all()
+
+
+def test_match_scoring_helpers():
+    from orm import match
+    v = match.Vectorizer(["notify the supervisor of incidents",
+                          "report incidents to the central bank",
+                          "capital ratio requirements"])
+    a, b, c = v.vectors()
+    assert match.cosine(a, b) > match.cosine(a, c)
+    assert match.strength(0.5) == "Strong match"
+    assert match.strength(0.1) == "Weak match"

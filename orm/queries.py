@@ -194,3 +194,80 @@ def deadlines(conn: sqlite3.Connection, category_id: str | None = None) -> pd.Da
         WHERE oa.kind = 'deadline'
         ORDER BY oa.hours, d.jurisdiction
     """, params)
+
+
+# --- clause explorer ------------------------------------------------------------
+
+def category_counts(conn: sqlite3.Connection, jurisdiction: str) -> dict[str, int]:
+    """Tagged clauses per category for one country."""
+    rows = conn.execute("""
+        SELECT pc.category_id, COUNT(*) FROM provision_category pc
+        JOIN provision p ON p.id = pc.provision_id
+        JOIN document d ON d.id = p.document_id
+        WHERE d.jurisdiction = ? AND pc.reviewed >= 0
+        GROUP BY 1
+    """, (jurisdiction,)).fetchall()
+    return {r[0]: r[1] for r in rows}
+
+
+def clauses(conn: sqlite3.Connection, jurisdiction: str, category_id: str,
+            query: str = "", limit: int = 300) -> pd.DataFrame:
+    """Clauses of one country in one category, in document order, with how
+    many cross-country equivalents each has."""
+    extra = ""
+    if query.strip():
+        ids = db.search_provisions(conn, query, limit=5000)
+        if not ids:
+            return pd.DataFrame(columns=["provision_id", "document_id", "doc_ref",
+                                         "doc_title", "ref", "text", "matches"])
+        extra = f" AND p.id IN ({','.join(str(int(i)) for i in ids)})"
+    return _df(conn, f"""
+        SELECT p.id AS provision_id, d.id AS document_id, d.ref AS doc_ref,
+               d.title AS doc_title, p.ref, p.text,
+               (SELECT COUNT(*) FROM provision_match m
+                 WHERE m.provision_id = p.id AND m.category_id = pc.category_id)
+                 AS matches
+        FROM provision_category pc
+        JOIN provision p ON p.id = pc.provision_id
+        JOIN document d ON d.id = p.document_id
+        WHERE pc.category_id = ? AND d.jurisdiction = ? AND pc.reviewed >= 0 {extra}
+        ORDER BY d.ref, d.id, p.seq
+        LIMIT ?
+    """, (category_id, jurisdiction, limit))
+
+
+def clause(conn: sqlite3.Connection, provision_id: int) -> dict | None:
+    row = conn.execute("""
+        SELECT p.id AS provision_id, p.ref, p.text, d.id AS document_id,
+               d.ref AS doc_ref, d.title AS doc_title, d.jurisdiction,
+               d.pdf_url, d.url
+        FROM provision p JOIN document d ON d.id = p.document_id
+        WHERE p.id = ?
+    """, (int(provision_id),)).fetchone()
+    return dict(row) if row else None
+
+
+def equivalents(conn: sqlite3.Connection, provision_id: int,
+                category_id: str) -> pd.DataFrame:
+    """The clause's best matches in other countries, strongest first."""
+    df = _df(conn, """
+        SELECT m.match_id AS provision_id, m.score, m.text_similarity,
+               m.shared_expectations, m.shared_terms,
+               d.jurisdiction, d.ref AS doc_ref, d.title AS doc_title,
+               d.pdf_url, d.url, p.ref, p.text
+        FROM provision_match m
+        JOIN provision p ON p.id = m.match_id
+        JOIN document d ON d.id = p.document_id
+        WHERE m.provision_id = ? AND m.category_id = ?
+        ORDER BY d.jurisdiction, m.score DESC
+    """, (int(provision_id), category_id))
+    labels = {e.id: e.label for _c, e in taxonomy.ALL_EXPECTATIONS}
+    df["shared_expectation_labels"] = [
+        [labels.get(x, x) for x in (s or "").split(",") if x]
+        for s in df["shared_expectations"]]
+    return df
+
+
+def has_text_in_category(conn: sqlite3.Connection, jurisdiction: str,
+                         category_id: str) -> bool:
+    return category_counts(conn, jurisdiction).get(category_id, 0) > 0

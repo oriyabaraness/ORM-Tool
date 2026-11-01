@@ -59,6 +59,10 @@ conduct, plus prudential categories.
 
 It shows:
 
+- **Clause explorer** – choose a country and a risk category, click any clause,
+  and the closest equivalent clauses from the other country appear beside it,
+  ranked Strong / Partial / Weak with the reasons for the match (shared
+  baseline expectations and key terms). Matching lives in `orm/match.py`.
 - **Coverage matrix** – category × country, with how deep the coverage is
   (provisions indexed / mapped from titles only / nothing found).
 - **Side by side** – both countries' documents and tagged provisions for one

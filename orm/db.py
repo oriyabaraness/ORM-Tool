@@ -13,6 +13,8 @@ Schema (one row per thing, everything joinable):
                         frequencies) for side-by-side comparison
     expectation_hit     baseline expectation found in a jurisdiction, with the
                         provision that evidences it (drives gap analysis)
+    provision_match     a clause's closest equivalents in other jurisdictions,
+                        within the same risk category (drives the clause explorer)
 """
 from __future__ import annotations
 
@@ -105,6 +107,17 @@ CREATE TABLE IF NOT EXISTS expectation_hit (
     provision_id   INTEGER NOT NULL REFERENCES provision(id) ON DELETE CASCADE,
     evidence       TEXT,
     PRIMARY KEY (jurisdiction, expectation_id, provision_id)
+);
+
+CREATE TABLE IF NOT EXISTS provision_match (
+    provision_id        INTEGER NOT NULL REFERENCES provision(id) ON DELETE CASCADE,
+    category_id         TEXT NOT NULL,
+    match_id            INTEGER NOT NULL REFERENCES provision(id) ON DELETE CASCADE,
+    score               REAL NOT NULL,
+    text_similarity     REAL NOT NULL,
+    shared_expectations TEXT,
+    shared_terms        TEXT,
+    PRIMARY KEY (provision_id, category_id, match_id)
 );
 
 CREATE TABLE IF NOT EXISTS meta (
@@ -210,6 +223,7 @@ def clear_classification(conn: sqlite3.Connection) -> None:
     conn.execute("DELETE FROM provision_category WHERE reviewed = 0")
     conn.execute("DELETE FROM obligation_attr")
     conn.execute("DELETE FROM expectation_hit")
+    conn.execute("DELETE FROM provision_match")
 
 
 def search_provisions(conn: sqlite3.Connection, query: str,
