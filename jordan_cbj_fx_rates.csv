@@ -1,0 +1,2 @@
+country,regulator,title,category,size,url,source_url,file_type,last_seen,connection_status
+Jordan,Central Bank of Jordan,EXCHANGE RATES OF MAJOR FOREIGN CURRENCIES ANNOUNCED BY CBJ,FX Rates,32KB,https://www.cbj.gov.jo/ebv4.0/root_storage/en/eb_list_page/exchange_rates_of_major_foreign_currencies_announced_by_cbj.xlsx,https://www.cbj.gov.jo/En/List/Annual_Statistical_Bulletin,XLSX,2026-11-01,fetched_live_cbj_fx_rates

@@ -1,9 +1,9 @@
-# Bank of Israel Publications Explorer — Design Reference
+# ORM Tool — Design Reference
 > Styling-only reference for a calm, text-first regulatory library inspired by the provided screenshot layout: white paper, soft gray dividers, deep navy actions, compact search, thin colored rules, and a right-hand source/context sidebar.
 
 **Theme:** light
 
-This document defines the visual system for the Bank of Israel Publications Explorer. It should capture the screenshot's structure and atmosphere without carrying over the screenshot's original subject matter. The experience should feel like an official research library for regulatory publications: readable, restrained, source-led, and precise.
+This document defines the visual system for ORM Tool. It should capture the screenshot's structure and atmosphere without carrying over the screenshot's original subject matter. The experience should feel like an official research library for regulatory publications: readable, restrained, source-led, and precise.
 
 The interface is not a SaaS landing page and not a marketing dashboard. It is a searchable publication library for Bank of Israel material, including PDFs, directives, circulars, reports, and extracted text. Use a fixed-feeling top navigation bar, a full-width informational banner, a two-column browse grid, and a right-hand sidebar for context, recent sources, and indexed material. Color should be sparse: deep navy for primary actions, pale blue for system notices, warm gray for dividers, and thin muted category rules to organize publication groups.
 
@@ -36,7 +36,7 @@ This design file reflects the current Streamlit application surface as of the Jo
 
 ### Header Navigation
 
-- **Logo:** Bank of Israel Publications Explorer
+- **Logo:** ORM Tool
 - **Top visual labels:** Catalog, Directives, Reader, Search
 - **Library segmented control:** Catalog, Reader, Regional Map
 - **Current behavior:** keep the existing Streamlit navigation model; this design pass is styling-only unless a later implementation task explicitly asks for new routing or controls.
@@ -340,7 +340,7 @@ Overall direction: create a BOI publication-library interface with a calm academ
 
 Example Component Prompts:
 
-1. Style the existing top navigation bar with the left-aligned “Bank of Israel Publications Explorer” logo and visible labels for Catalog, Directives, Reader, and Search; do not add new navigation behavior unless explicitly requested.
+1. Style the existing top navigation bar with the left-aligned “ORM Tool” logo and visible labels for Catalog, Directives, Reader, and Search; do not add new navigation behavior unless explicitly requested.
 2. Style the existing Library segmented control for Catalog, Reader, and Regional Map with restrained spacing, clear active state, and no hidden desktop items.
 3. Style the existing Browse Publications area as a two-column source shelf. Each group should use a 4px colored rule, a large serif title, and a short sans-serif description.
 4. Style the right sidebar/info area with sections for the BOI library summary and current index, each separated by thin gray horizontal rules.

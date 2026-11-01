@@ -26,10 +26,28 @@ side-by-side viewer. It downloads the selected publication on demand, renders
 the original PDF pages, extracts page text and word boxes, and supports
 in-document search with synchronized PDF/text navigation.
 
+The Regional Map tab includes country-adjusted publication views and a focused
+ORM risk screen. Choose the publication country from the regional map, then
+compare all BOI Proper Conduct directive update frequency against a single risk
+proxy. The method is fixed to same-year annual correlation, since 2012, using
+website update dates.
+
 To add more PDFs to the searchable full-text corpus:
 
 ```bash
 python boi_pdf_text.py
+```
+
+To refresh connected Central Bank of Jordan feeds:
+
+```bash
+python jordan_cbj_index.py
+python jordan_cbj_financial_stability.py
+python jordan_cbj_foreign_exchange_reserves.py
+python jordan_cbj_fx_rates.py
+python israel_boi_fx_reserves.py
+python overnight_rate_analysis.py
+python banking_sector_indicators.py
 ```
 
 ## Risk Compare (Israel vs Jordan POC)
