@@ -540,6 +540,118 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
     line-height: 1.45;
   }}
 
+  .comparison-card {{
+    display: grid;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid rgba(23, 52, 91, 0.18);
+    border-radius: 8px;
+    background: #fbfbfa;
+  }}
+
+  .comparison-title {{
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    color: var(--accent-strong);
+    font-size: 12px;
+    font-weight: 800;
+  }}
+
+  .venn {{
+    position: relative;
+    height: 150px;
+    margin: 0 auto;
+    width: min(100%, 270px);
+  }}
+
+  .venn-circle {{
+    position: absolute;
+    top: 10px;
+    display: grid;
+    place-items: center;
+    align-content: center;
+    width: 132px;
+    height: 132px;
+    border: 2px solid rgba(23, 52, 91, 0.42);
+    border-radius: 50%;
+    background: rgba(0, 109, 126, 0.15);
+    color: var(--accent-strong);
+    text-align: center;
+  }}
+
+  .venn-circle.right {{
+    right: 0;
+    border-color: rgba(95, 152, 108, 0.65);
+    background: rgba(95, 152, 108, 0.17);
+    color: #2b6843;
+  }}
+
+  .venn-circle.left {{
+    left: 0;
+  }}
+
+  .venn-circle strong {{
+    max-width: 96px;
+    overflow: hidden;
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }}
+
+  .venn-circle span,
+  .venn-shared span {{
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 800;
+  }}
+
+  .venn-shared {{
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    z-index: 2;
+    display: grid;
+    place-items: center;
+    width: 76px;
+    min-height: 54px;
+    padding: 6px;
+    transform: translate(-50%, -50%);
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: rgba(255, 255, 255, 0.94);
+    box-shadow: rgba(0, 0, 0, 0.08) 0 4px 18px;
+    color: var(--ink);
+    text-align: center;
+  }}
+
+  .venn-shared strong {{
+    font-size: 22px;
+    line-height: 1;
+  }}
+
+  .comparison-bucket {{
+    display: grid;
+    gap: 5px;
+  }}
+
+  .comparison-bucket b {{
+    color: var(--muted);
+    font-size: 12px;
+  }}
+
+  .comparison-chip {{
+    display: inline-block;
+    margin: 0 4px 4px 0;
+    padding: 3px 7px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    color: var(--accent-strong);
+    background: white;
+    font-size: 11px;
+    font-weight: 700;
+  }}
+
   mark {{
     border-radius: 3px;
     padding: 0 2px;
@@ -585,7 +697,7 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
 <div class="reader">
   <aside class="sidebar">
     <div class="title">
-      <div class="rail-label">Bank of Israel Reader</div>
+      <div class="rail-label">ORM Tool Reader</div>
       <h1 id="docTitle"></h1>
       <a id="sourceLink" target="_blank" rel="noreferrer">Source PDF</a>
     </div>
@@ -810,6 +922,62 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
       .join("") + "</ul>";
   }}
 
+  function renderChips(items) {{
+    const values = Array.isArray(items) && items.length ? items : ["None flagged"];
+    return values.slice(0, 6)
+      .map(item => `<span class="comparison-chip">${{escapeHtml(item)}}</span>`)
+      .join("");
+  }}
+
+  function renderComparisonVenn() {{
+    const comparison = payload.comparison;
+    if (!comparison || !comparison.enabled) {{
+      return "";
+    }}
+    const primary = comparison.primary || {{}};
+    const secondary = comparison.secondary || {{}};
+    const shared = comparison.sharedNotes || [];
+    const primaryOnly = comparison.primaryOnly || [];
+    const secondaryOnly = comparison.secondaryOnly || [];
+    const title = comparison.kicker || "Two-country comparison";
+    const sharedLabel = comparison.sharedLabel || "shared";
+    const ariaLabel = comparison.title || "Note Venn comparison";
+    return `
+      <section class="comparison-card">
+        <div class="comparison-title">
+          <span>${{escapeHtml(title)}}</span>
+          <span>${{shared.length}} ${{escapeHtml(sharedLabel)}}</span>
+        </div>
+        <div class="venn" aria-label="${{escapeHtml(ariaLabel)}}">
+          <div class="venn-circle left">
+            <strong>${{escapeHtml(primary.country || "Country A")}}</strong>
+            <span>${{primaryOnly.length}} unique</span>
+          </div>
+          <div class="venn-circle right">
+            <strong>${{escapeHtml(secondary.country || "Country B")}}</strong>
+            <span>${{secondaryOnly.length}} unique</span>
+          </div>
+          <div class="venn-shared">
+            <strong>${{shared.length}}</strong>
+            <span>shared</span>
+          </div>
+        </div>
+        <div class="comparison-bucket">
+          <b>${{escapeHtml(primary.title || "Primary publication")}}</b>
+          <div>${{renderChips(primaryOnly)}}</div>
+        </div>
+        <div class="comparison-bucket">
+          <b>${{escapeHtml(sharedLabel.charAt(0).toUpperCase() + sharedLabel.slice(1))}}</b>
+          <div>${{renderChips(shared)}}</div>
+        </div>
+        <div class="comparison-bucket">
+          <b>${{escapeHtml(secondary.title || "Comparison publication")}}</b>
+          <div>${{renderChips(secondaryOnly)}}</div>
+        </div>
+      </section>
+    `;
+  }}
+
   function renderLegalAnalysis(match) {{
     const page = pages[state.activePage - 1] || pages[0] || {{}};
     const pageNumber = page.number || state.activePage || 1;
@@ -831,6 +999,7 @@ def pdf_viewer_html(model: dict[str, Any]) -> str:
         <div class="analysis-kicker">Legal analysis</div>
         <h2>Page ${{pageNumber}}</h2>
         <div class="analysis-citation">${{escapeHtml(payload.title)}} · Page ${{pageNumber}} of ${{pageInput.max}}</div>
+        ${{renderComparisonVenn()}}
         <section class="analysis-section">
           <h3>Regulatory reading</h3>
           <p>${{escapeHtml(reading)}}</p>
