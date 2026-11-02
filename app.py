@@ -1,8 +1,7 @@
 """
 ORM Tool -- a Streamlit UI over the crawl/extract pipeline.
 
-  Library layout: browse the catalog and PDF reader from a Sefaria-style
-                  index page.
+  Design direction: see DESIGN.md (regulatory risk comparison workspace).
 Run with:  streamlit run app.py   (from inside the .venv)
 
 Text extraction reuses boi_pdf_text.extract_one, and results are cached per URL.
