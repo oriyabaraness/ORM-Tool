@@ -9,6 +9,7 @@ import html
 import os
 import re
 
+import pandas as pd
 import streamlit as st
 
 from orm import classify, db, match, pipeline, queries, taxonomy
@@ -85,6 +86,15 @@ CSS = """
 .orm-match .bar {height: 3px; background: #ececea; border-radius: 2px; margin-bottom: 8px;}
 .orm-match .bar span {display: block; height: 3px; background: #9b2f4a; border-radius: 2px;}
 .orm-match .strength {float: right; font-weight: 600; color: #9b2f4a;}
+.orm-fulltext {max-height: 340px; overflow-y: auto; white-space: normal; padding-right: 6px;}
+.orm-selected .orm-fulltext {max-height: 520px;}
+.orm-read-meta {font-family: system-ui, sans-serif; font-size: 13px; color: #555; margin: 4px 0 12px;}
+.orm-read {border-left: 3px solid #ececea; padding: 6px 0 6px 12px; margin-bottom: 8px;}
+.orm-read.tagged {border-left-color: #9b2f4a; background: #fdf8f9;}
+.orm-read .ref {font-family: system-ui, sans-serif; font-weight: 600; color: #17345b;
+  font-size: 13px; margin-right: 6px;}
+.orm-warn {background: #fff6e5; border: 1px solid #f3dca8; border-radius: 8px;
+  padding: 10px 14px; font-family: system-ui, sans-serif; font-size: 14px; margin: 8px 0;}
 </style>
 """
 
@@ -113,8 +123,11 @@ def _e(value) -> str:
     return html.escape("" if value is None else str(value))
 
 
-def _highlight(text: str, terms: list[str], limit: int = 900) -> str:
-    text = text if len(text) <= limit else text[:limit].rsplit(" ", 1)[0] + "…"
+def _highlight(text: str, terms: list[str], limit: int | None = None) -> str:
+    """Escape + highlight. The whole text is kept unless a limit is given;
+    callers wrap it in a scrollable .orm-fulltext box instead of cutting."""
+    if limit and len(text) > limit:
+        text = text[:limit].rsplit(" ", 1)[0] + "…"
     out = _e(text)
     for t in sorted({t for t in terms if len(t) > 2}, key=len, reverse=True):
         out = re.sub(f"({re.escape(html.escape(t))})", r"<mark>\1</mark>", out,
@@ -199,7 +212,7 @@ def render_jurisdiction_column(conn, category_id: str, j: str, query: str) -> No
         reviewed = " · ✓ reviewed" if p["reviewed"] == 1 else ""
         cards.append(
             f'<div class="orm-prov"><div class="head"><b>{_e(p["doc_ref"] or p["doc_title"])}</b>'
-            f' {_e(p["ref"])}{reviewed}</div>{_highlight(p["text"], terms + ev_terms)}'
+            f' {_e(p["ref"])}{reviewed}</div><div class="orm-fulltext">{_highlight(p["text"], terms + ev_terms)}</div>'
             f'<div>{chips}</div></div>')
     st.markdown("".join(cards), unsafe_allow_html=True)
 
@@ -320,8 +333,9 @@ def render_clause_explorer(conn, country: str, category_id: str) -> None:
             f'<div class="orm-selected"><div class="head"><b>'
             f'{_e(clause["doc_ref"] or clause["doc_title"])}</b> {_e(clause["ref"])}'
             f' · {_e(clause["doc_title"])}{_source_link(clause)}</div>'
-            f'{_highlight(clause["text"], classify.matched_keywords(category_id, clause["text"]), limit=1600)}'
-            f'</div>', unsafe_allow_html=True)
+            f'<div class="orm-fulltext">'
+            f'{_highlight(clause["text"], classify.matched_keywords(category_id, clause["text"]))}'
+            f'</div></div>', unsafe_allow_html=True)
 
         matches = queries.equivalents(conn, selected_id, category_id)
         for j in others:
@@ -350,11 +364,92 @@ def render_clause_explorer(conn, country: str, category_id: str) -> None:
                     f'</span></div><div class="head"><b>{_e(m["doc_ref"] or m["doc_title"])}'
                     f'</b> {_e(m["ref"])} · {_e(m["doc_title"])}{_source_link(m)}'
                     f'<span class="strength">{strength}</span></div>'
-                    f'{_highlight(m["text"], [], limit=900)}<div>{why}</div>{terms}</div>')
+                    f'<div class="orm-fulltext">{_highlight(m["text"], [])}</div>'
+                    f'<div>{why}</div>{terms}</div>')
             st.markdown("".join(cards), unsafe_allow_html=True)
         st.caption("Matches are suggested by text similarity and shared baseline "
                    "expectations within the same risk category. Confirm before "
                    "relying on them.")
+
+
+# --- full directive reader --------------------------------------------------
+
+_STATUS_TEXT = {
+    "pending": "not read yet",
+    "no_text": "no text available",
+    "error": "reading failed",
+}
+
+
+def render_full_directive(conn, country: str, category_id: str) -> None:
+    """Read one directive from start to finish -- every provision, in order,
+    with the clauses tagged for the current risk category marked."""
+    docs = queries.documents(conn, country)
+    if docs.empty:
+        st.markdown(f'<div class="orm-note">No {NAMES[country]} documents in the '
+                    'index.</div>', unsafe_allow_html=True)
+        return
+
+    unread = docs[docs["text_status"] != "ok"]
+    if not unread.empty:
+        reasons = "".join(
+            f"<li>{_e(r['doc_ref'] or '')} {_e(r['doc_title'])} — "
+            f"{_STATUS_TEXT.get(r['text_status'], r['text_status'])}"
+            f"{': ' + _e(r['error']) if r['error'] else ''}</li>"
+            for _, r in unread.head(60).iterrows())
+        more = f"<li>… and {len(unread) - 60} more</li>" if len(unread) > 60 else ""
+        st.markdown(
+            f'<div class="orm-warn"><b>{len(unread)} of {len(docs)} {NAMES[country]} '
+            'documents have no text in the index, so Risk Compare cannot read '
+            'them.</b> Run <code>python orm_pipeline.py build --fetch</code>, or '
+            'save the PDF from your browser into <code>orm_texts/manual/</code> '
+            'named after the document id.<details><summary>Show which</summary>'
+            f'<ul>{reasons}{more}</ul></details></div>', unsafe_allow_html=True)
+
+    read = docs[docs["text_status"] == "ok"]
+    if read.empty:
+        return
+    labels = {r["document_id"]: (f"{r['doc_ref'] + ' · ' if r['doc_ref'] else ''}"
+                                 f"{r['doc_title']}  ({int(r['provisions'])} provisions)")
+              for _, r in read.iterrows()}
+    doc_id = st.selectbox("Directive", list(labels), format_func=labels.get,
+                          key=f"orm_read_doc_{country}")
+    doc = read[read["document_id"] == doc_id].iloc[0]
+    provs = queries.document_provisions(conn, doc_id)
+
+    chars = int(doc["chars"] or 0)
+    kept = int(doc["provision_chars"] or 0)
+    pages = f"{int(doc['pages'])} pages · " if pd.notna(doc["pages"]) and doc["pages"] else ""
+    coverage = f" · {min(100, round(100 * kept / chars))}% of the text kept" if chars else ""
+    tagged_here = provs["categories"].str.split(",").apply(
+        lambda cs: category_id in cs).sum()
+    link = doc["pdf_url"] or doc["url"]
+    link_html = (f' · <a href="{_e(link)}" target="_blank">open source ↗</a>'
+                 if link else "")
+    st.markdown(
+        f'<div class="orm-read-meta">{pages}{len(provs)} provisions'
+        f'{coverage} · {int(doc["tagged"])} tagged with any risk category · '
+        f'{tagged_here} with <b>{_e(taxonomy.BY_ID[category_id].name)}</b>'
+        f'{link_html}</div>', unsafe_allow_html=True)
+
+    only_tagged = st.toggle("Only clauses in this risk category", value=False,
+                            key=f"orm_read_only_{country}")
+    blocks = []
+    for _, p in provs.iterrows():
+        cats = [c for c in p["categories"].split(",") if c]
+        in_cat = category_id in cats
+        if only_tagged and not in_cat:
+            continue
+        chips = "".join(f'<span class="orm-chip">{_e(taxonomy.BY_ID[c].name)}</span>'
+                        for c in cats if c in taxonomy.BY_ID)
+        terms = classify.matched_keywords(category_id, p["text"]) if in_cat else []
+        blocks.append(
+            f'<div class="orm-read{" tagged" if in_cat else ""}">'
+            f'<span class="ref">{_e(p["ref"] or "¶")}</span>'
+            f'{_highlight(p["text"], terms)}<div>{chips}</div></div>')
+    with st.container(height=760, border=False):
+        st.markdown("".join(blocks) or '<div class="orm-note">No clauses.</div>',
+                    unsafe_allow_html=True)
 
 
 # --- section ------------------------------------------------------------------
@@ -406,11 +501,13 @@ def render_risk_compare_section(path: str | None = None) -> None:
                 st.rerun()
         st.caption(taxonomy.BY_ID[category_id].description)
 
-        explorer, side, gap, dl, overview = st.tabs(
-            ["Clause explorer", "Side by side", "Gap analysis", "Deadlines",
-             "Coverage matrix"])
+        explorer, reader, side, gap, dl, overview = st.tabs(
+            ["Clause explorer", "Full directive", "Side by side", "Gap analysis",
+             "Deadlines", "Coverage matrix"])
         with explorer:
             render_clause_explorer(conn, country, category_id)
+        with reader:
+            render_full_directive(conn, country, category_id)
         with side:
             query = st.text_input("Search within this category", "",
                                   placeholder="e.g. notify, outsourcing, 24 hours",

@@ -108,10 +108,39 @@ _PAGE_FURNITURE = re.compile(
     r"^\s*(page \d+( of \d+)?|\d{1,3}|-\s*\d+\s*-|\d+\s*/\s*\d+)\s*$", re.I)
 
 
+# Bump when split_provisions changes, so the pipeline re-splits documents
+# that were already read with the old rules (cached text, so it's fast).
+SPLITTER_VERSION = "2"
+
+# A paragraph number alone on its line ("12." / "4.2.1" / "(a)") -- PDF text
+# extraction often puts the number and its text on separate lines.
+_BARE_NUMBER = re.compile(r"^\s*(?:\d{1,3}(?:\.\d{1,3}){0,3}\.|\d{1,3}(?:\.\d{1,3}){1,3}"
+                          r"|\(\s*[a-zA-Z0-9]{1,4}\s*\))\s*$")
+_BARE_ARTICLE = re.compile(r"^\s*(?:Article|Section|Chapter|Part)\s*\(?\s*[\dIVXLC]+"
+                           r"\s*\)?\s*[:.\-]?\s*$", re.I)
+
+
 def normalize(text: str) -> str:
     text = text.replace("­", "").replace("\r", "")
     text = re.sub(r"(\w)-\n(\w)", r"\1\2", text)          # de-hyphenate
-    return text
+    # glue a lone paragraph number / article heading onto the next line
+    lines = text.split("\n")
+    out: list[str] = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if _BARE_NUMBER.match(line) or _BARE_ARTICLE.match(line):
+            j = i + 1
+            while j < len(lines) and not lines[j].strip():
+                j += 1
+            if j < len(lines) and not (_BARE_NUMBER.match(lines[j])
+                                       or _BARE_ARTICLE.match(lines[j])):
+                out.append(f"{line.strip()} {lines[j].strip()}")
+                i = j + 1
+                continue
+        out.append(line)
+        i += 1
+    return "\n".join(out)
 
 
 def split_provisions(text: str, min_chars: int = 160,

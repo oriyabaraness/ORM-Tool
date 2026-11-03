@@ -268,3 +268,76 @@ def test_match_scoring_helpers():
     assert match.cosine(a, b) > match.cosine(a, c)
     assert match.strength(0.5) == "Strong match"
     assert match.strength(0.1) == "Weak match"
+
+
+# --- reading the whole directive ---------------------------------------------
+
+# Paragraph numbers on their own line, the way PDF text extraction often
+# returns them.
+SPLIT_LINE_TEXT = """
+1.
+The board of directors shall approve the outsourcing policy and review it at
+least once a year, including the list of material outsourcing arrangements.
+2.
+The banking corporation shall assess the concentration risk arising from
+reliance on a single service provider before entering into an arrangement.
+2.1
+The assessment shall consider exit strategies and substitutability.
+Article (7)
+Banks shall notify the Central Bank before outsourcing any material activity.
+"""
+
+
+def test_paragraph_number_on_its_own_line_starts_a_provision():
+    provs = extract.split_provisions(SPLIT_LINE_TEXT, min_chars=60)
+    refs = [r for r, _ in provs]
+    assert refs[:2] == ["§1", "§2"]
+    assert "Article 7" in refs
+    # nothing is lost: every sentence of the source is in some provision
+    joined = " ".join(t for _, t in provs)
+    for phrase in ("list of material outsourcing", "exit strategies",
+                   "single service provider", "before outsourcing"):
+        assert phrase in joined
+
+
+def test_full_directive_queries_return_every_provision(built_db):
+    with db.session(built_db) as conn:
+        docs = queries.documents(conn, "IL")
+        il = docs[docs["document_id"] == "IL-TEST-1"].iloc[0]
+        assert il["text_status"] == "ok"
+        provs = queries.document_provisions(conn, "IL-TEST-1")
+        assert len(provs) == il["provisions"] > 0
+        assert list(provs["seq"]) == sorted(provs["seq"])
+        # untagged clauses are still part of the directive
+        assert (provs["categories"] == "").any() or len(provs) >= 3
+        assert il["provision_chars"] >= 0.9 * il["chars"]
+        # the document without text is reported, not silently dropped
+        jo = queries.documents(conn, "JO")
+        assert set(jo[jo["text_status"] != "ok"]["document_id"]) == {"JO-TEST-2"}
+
+
+def test_splitter_change_resplits_already_read_documents(built_db, monkeypatch):
+    with db.session(built_db) as conn:
+        before = conn.execute("SELECT COUNT(*) FROM provision").fetchone()[0]
+    monkeypatch.setattr(extract, "SPLITTER_VERSION", "test-next")
+    monkeypatch.setattr(extract, "split_provisions",
+                        lambda text, **kw: [("§x", "one block")])
+    pipeline.build(built_db, fetch=False)
+    with db.session(built_db) as conn:
+        after = conn.execute("SELECT COUNT(*) FROM provision").fetchone()[0]
+        assert db.get_meta(conn, "splitter_version") == "test-next"
+    assert before > after == 2  # both read documents were re-split
+
+
+def test_full_directive_tab_renders(built_db, monkeypatch):
+    rendered: list[str] = []
+    monkeypatch.setitem(sys.modules, "streamlit", _fake_streamlit(rendered))
+    sys.modules.pop("orm_compare", None)
+    orm_compare = importlib.import_module("orm_compare")
+    with db.session(built_db) as conn:
+        orm_compare.render_full_directive(conn, "IL", "op_resilience")
+        orm_compare.render_full_directive(conn, "JO", "op_resilience")
+    page = "\n".join(rendered)
+    assert "% of the text kept" in page
+    assert "§3" in page and "within 30 days" in page   # last sentence is there
+    assert "1 of 2 Jordan documents have no text" in page

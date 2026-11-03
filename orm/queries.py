@@ -271,3 +271,36 @@ def equivalents(conn: sqlite3.Connection, provision_id: int,
 def has_text_in_category(conn: sqlite3.Connection, jurisdiction: str,
                          category_id: str) -> bool:
     return category_counts(conn, jurisdiction).get(category_id, 0) > 0
+
+
+# --- full directive reader ----------------------------------------------------
+
+def documents(conn: sqlite3.Connection, jurisdiction: str) -> pd.DataFrame:
+    """Every document of one country, with how much of it was read."""
+    return _df(conn, """
+        SELECT d.id AS document_id, d.ref AS doc_ref, d.title AS doc_title,
+               d.text_status, d.error, d.pages, d.chars, d.pdf_url, d.url,
+               (SELECT COUNT(*) FROM provision p WHERE p.document_id = d.id)
+                 AS provisions,
+               (SELECT COALESCE(SUM(LENGTH(REPLACE(p.text, ' ', ''))), 0) FROM provision p
+                 WHERE p.document_id = d.id) AS provision_chars,
+               (SELECT COUNT(DISTINCT pc.provision_id) FROM provision_category pc
+                 JOIN provision p ON p.id = pc.provision_id
+                 WHERE p.document_id = d.id AND pc.reviewed >= 0) AS tagged
+        FROM document d
+        WHERE d.jurisdiction = ?
+        ORDER BY (d.text_status = 'ok') DESC, d.ref, d.title
+    """, (jurisdiction,))
+
+
+def document_provisions(conn: sqlite3.Connection, document_id: str) -> pd.DataFrame:
+    """Every provision of one document in reading order, with its risk tags
+    (comma-separated category ids; empty when the clause wasn't tagged)."""
+    return _df(conn, """
+        SELECT p.id AS provision_id, p.seq, p.ref, p.text,
+               COALESCE((SELECT GROUP_CONCAT(pc.category_id) FROM provision_category pc
+                 WHERE pc.provision_id = p.id AND pc.reviewed >= 0), '') AS categories
+        FROM provision p
+        WHERE p.document_id = ?
+        ORDER BY p.seq
+    """, (document_id,))

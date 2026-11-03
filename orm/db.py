@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS document (
     text_status  TEXT NOT NULL DEFAULT 'pending',
     text_path    TEXT,
     pages        INTEGER,
-    chars        INTEGER,
+    chars        INTEGER,     -- non-whitespace characters in the source text
     error        TEXT
 );
 

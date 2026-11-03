@@ -31,6 +31,12 @@ def extract_texts(conn: sqlite3.Connection, *, fetch: bool = True,
                   limit: int | None = None, retry_errors: bool = False,
                   log: Log = _noop) -> dict[str, int]:
     """Get text for each document and split it into provisions."""
+    if db.get_meta(conn, "splitter_version") != extract.SPLITTER_VERSION:
+        # splitting rules changed: re-read every document (from cache)
+        conn.execute("UPDATE document SET text_status='pending' "
+                     "WHERE text_status='ok'")
+        db.set_meta(conn, "splitter_version", extract.SPLITTER_VERSION)
+        conn.commit()
     where = ["1=1"]
     params: list = []
     if jurisdictions:
@@ -55,7 +61,7 @@ def extract_texts(conn: sqlite3.Connection, *, fetch: bool = True,
             conn.execute(
                 "UPDATE document SET text_status='ok', text_path=?, "
                 "pages=COALESCE(?, pages), chars=?, error=NULL WHERE id=?",
-                (path, pages, len(text), doc_id))
+                (path, pages, len("".join(text.split())), doc_id))
             counts["ok"] += 1
             log(f"[{i}/{len(rows)}] {doc_id}: {len(provisions)} provisions ({origin})")
         except LookupError as exc:
