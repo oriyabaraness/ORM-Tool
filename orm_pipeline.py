@@ -7,6 +7,7 @@ Usage:
   python orm_pipeline.py build --fetch --retry-errors
   python orm_pipeline.py classify         # re-tag only (after taxonomy edits)
   python orm_pipeline.py status
+  python orm_pipeline.py update           # re-crawl regulators, rebuild, report changes
 
 Jordan: most CBJ entries have no direct PDF link in the index. Either run
 `python jordan_cbj_index.py` first (it tries to scrape PDF links), or save a
@@ -15,7 +16,7 @@ lists the ids.
 """
 import argparse
 
-from orm import db, pipeline
+from orm import db, pipeline, update
 
 
 def cmd_status(args):
@@ -56,6 +57,8 @@ def main():
     sub.add_parser("classify", help="re-run tagging on existing provisions")
     s = sub.add_parser("status", help="show index coverage")
     s.add_argument("--missing", action="store_true", help="list docs without text")
+    sub.add_parser("update", help="re-crawl every regulator, rebuild, report "
+                                  "what is new (writes update_reports/latest.txt)")
 
     args = ap.parse_args()
     if args.cmd == "build":
@@ -66,6 +69,9 @@ def main():
         with db.session(args.db) as conn:
             db.init(conn)
             pipeline.classify_all(conn, log=print)
+    elif args.cmd == "update":
+        report = update.update(args.db, log=print)
+        print("\n" + report.to_text())
     else:
         cmd_status(args)
 

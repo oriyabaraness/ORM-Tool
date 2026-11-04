@@ -12,3 +12,7 @@ boi_texts/*.txt.gz
 orm.db
 orm_texts/*.txt.gz
 orm_texts/manual/
+
+# Automatic updates (./update.sh)
+update_reports/
+*.before-update

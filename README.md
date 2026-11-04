@@ -88,3 +88,24 @@ to try scraping them, or save a PDF from the CBJ site as
 Code layout: `orm/` (taxonomy, db, sources, extract, classify, pipeline,
 queries), `orm_compare.py` (the Streamlit view), `tests/test_orm.py`
 (`python -m pytest tests`).
+
+## Automatic updates
+
+`./update.sh` refreshes everything in one go:
+
+1. re-crawls the Bank of Israel page list and Proper Conduct directives
+2. re-reads the Central Bank of Jordan regulations list
+3. downloads and reads any new PDFs, then re-tags and re-matches clauses
+4. writes a short "what's new" report to `update_reports/latest.txt`
+
+If a regulator's site blocks the crawler, its previous list is kept, so a bad
+run never removes documents. The full log is in `update_reports/update.log`.
+
+To run it every week on a Mac, add one line with `crontab -e`, for example
+Sunday 08:17:
+
+```
+17 8 * * 0 /full/path/to/orm-revolut/update.sh
+```
+
+The computer must be awake at that time.

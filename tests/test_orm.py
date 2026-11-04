@@ -341,3 +341,48 @@ def test_full_directive_tab_renders(built_db, monkeypatch):
     assert "% of the text kept" in page
     assert "§3" in page and "within 30 days" in page   # last sentence is there
     assert "1 of 2 Jordan documents have no text" in page
+
+
+# --- automatic update --------------------------------------------------------
+
+def _script(root, name, body):
+    (root / name).write_text(body, encoding="utf-8")
+
+
+def test_update_keeps_previous_list_when_crawler_is_blocked(tmp_path):
+    from orm import update
+    csv_text = "title,url\n" + "".join(f"doc {i},u{i}\n" for i in range(10))
+    (tmp_path / "list.csv").write_text(csv_text, encoding="utf-8")
+    # a "blocked" crawler that overwrites the list with 1 row
+    _script(tmp_path, "crawl.py", "open('list.csv','w').write('title,url\\nx,y\\n')\n")
+    res = update.run_step(update.Step("t", "crawl.py", "list.csv"), lambda m: None,
+                          root=str(tmp_path))
+    assert not res.ok and "kept the previous list" in res.message
+    assert (tmp_path / "list.csv").read_text(encoding="utf-8") == csv_text
+    # a crashing crawler is rolled back too
+    _script(tmp_path, "crash.py", "open('list.csv','w').write('');raise SystemExit(3)\n")
+    res = update.run_step(update.Step("t", "crash.py", "list.csv"), lambda m: None,
+                          root=str(tmp_path))
+    assert not res.ok and (tmp_path / "list.csv").read_text(encoding="utf-8") == csv_text
+    # a healthy crawler that adds rows is accepted
+    _script(tmp_path, "grow.py", "open('list.csv','a').write('doc 10,u10\\n')\n")
+    res = update.run_step(update.Step("t", "grow.py", "list.csv"), lambda m: None,
+                          root=str(tmp_path))
+    assert res.ok and (res.rows_before, res.rows_after) == (10, 11)
+    assert not list(tmp_path.glob("*.before-update"))
+
+
+def test_update_reports_new_and_changed_documents(built_db, tmp_path, monkeypatch):
+    from orm import update
+    docs = _fake_docs()
+    docs[0]["lastmod"] = "2026-11-01"                      # IL-TEST-1 changed
+    docs.append({**docs[2], "id": "JO-TEST-3", "title": "New climate instructions"})
+    monkeypatch.setattr(sources, "CONNECTORS", {
+        "test": ("IL", lambda: [d for d in docs if d["jurisdiction"] == "IL"]),
+        "test_jo": ("JO", lambda: [d for d in docs if d["jurisdiction"] == "JO"])})
+    report = update.update(built_db, steps=[], report_dir=str(tmp_path / "r"),
+                           log=lambda m: None)
+    assert [d["id"] for d in report.new] == ["JO-TEST-3"]
+    assert [(d["id"], d["why"]) for d in report.changed] == [("IL-TEST-1", "page updated")]
+    text = (tmp_path / "r" / "latest.txt").read_text(encoding="utf-8")
+    assert "New documents: 1" in text and "New climate instructions" in text
