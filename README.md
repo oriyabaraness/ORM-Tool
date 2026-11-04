@@ -1,6 +1,6 @@
-# orm-revolut
+# banking-orm-tool
 
-Bank of Israel publications explorer and extraction utilities.
+Banking ORM tool: compares banking regulatory risk across countries (Israel, Jordan), plus a Bank of Israel publications explorer.
 
 ## Run locally
 
@@ -105,7 +105,7 @@ To run it every week on a Mac, add one line with `crontab -e`, for example
 Sunday 08:17:
 
 ```
-17 8 * * 0 /full/path/to/orm-revolut/update.sh
+17 8 * * 0 /full/path/to/banking-orm-tool/update.sh
 ```
 
 The computer must be awake at that time.
