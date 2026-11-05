@@ -1,6 +1,6 @@
 # banking-orm-tool
 
-Banking ORM tool: compares banking regulatory risk across countries (Israel, Jordan), plus a Bank of Israel publications explorer.
+Banking ORM tool: compares banking regulatory risk across countries (Israel, Jordan, Turkey), plus a Bank of Israel publications explorer.
 
 The app opens on **Compare**. The left menu has the comparison workspace
 (Compare, Coverage, Gaps, Deadlines, Changes) and the reference screens
@@ -47,6 +47,7 @@ To refresh connected Central Bank of Jordan feeds:
 
 ```bash
 python jordan_cbj_index.py
+python turkey_cbrt_index.py
 python jordan_cbj_financial_stability.py
 python jordan_cbj_foreign_exchange_reserves.py
 python jordan_cbj_fx_rates.py
@@ -55,10 +56,10 @@ python overnight_rate_analysis.py
 python banking_sector_indicators.py
 ```
 
-## Risk Compare (Israel vs Jordan POC)
+## Risk Compare (Israel, Jordan, Turkey)
 
-The **Risk Compare** section lines up Bank of Israel and Central Bank of Jordan
-regulation against one risk taxonomy (`orm/taxonomy.py`): governance,
+The **Risk Compare** section lines up Bank of Israel, Central Bank of Jordan
+and Central Bank of the Republic of Türkiye (CBRT) regulation against one risk taxonomy (`orm/taxonomy.py`): governance,
 operational resilience, outsourcing, IT/cyber, incident reporting, AML,
 conduct, plus prudential categories.
 
@@ -94,12 +95,17 @@ Code layout: `orm/` (taxonomy, db, sources, extract, classify, pipeline,
 queries), `orm_compare.py` (the Streamlit view), `tests/test_orm.py`
 (`python -m pytest tests`).
 
+Turkey note: the CBRT covers monetary policy, payment systems and reserve
+operations. Most Turkish prudential banking rules (capital, liquidity, credit
+risk, outsourcing, IT) are issued by the BRSA (BDDK), so Turkey will show few
+matches in those categories until a BDDK feed is added.
+
 ## Automatic updates
 
 `./update.sh` refreshes everything in one go:
 
 1. re-crawls the Bank of Israel page list and Proper Conduct directives
-2. re-reads the Central Bank of Jordan regulations list
+2. re-reads the Central Bank of Jordan and Central Bank of Turkey regulations lists
 3. downloads and reads any new PDFs, then re-tags and re-matches clauses
 4. writes a short "what's new" report to `update_reports/latest.txt`
 

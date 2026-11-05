@@ -118,7 +118,7 @@ highlighted and scrolled into view. Used when someone clicks "Open in source".
 | `--highlight` | `#fff1b8` | Search and keyword highlights in text |
 
 Country accents (thin 3px rules and small dots only, never fills):
-Israel `#006d7e`, Jordan `#9b2f4a`; add one muted hue per new country.
+Israel `#006d7e`, Jordan `#9b2f4a`, Turkey `#8a6a1f`; add one muted hue per new country.
 Never use color as the only signal: every status also has a text label.
 
 Dark mode: plan for it in tokens; not required for the Streamlit stage.

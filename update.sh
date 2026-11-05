@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Refresh Risk Compare: re-crawl Bank of Israel + Central Bank of Jordan,
+# Refresh Risk Compare: re-crawl Bank of Israel, Central Bank of Jordan and
+# Central Bank of Turkey,
 # download new directives, rebuild the index, write a "what's new" report.
 #
 # Run by hand:      ./update.sh

@@ -46,6 +46,8 @@ STEPS = [
          "boi_proper_conduct_directives.csv"),
     Step("Central Bank of Jordan regulations", "jordan_cbj_index.py",
          "jordan_cbj_regulations.csv", timeout=1800),
+    Step("Central Bank of Turkey regulations", "turkey_cbrt_index.py",
+         "turkey_cbrt_regulations.csv", timeout=900),
 ]
 
 # A crawl that keeps less than this share of the previous rows is treated as

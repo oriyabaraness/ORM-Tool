@@ -14,8 +14,9 @@ import streamlit as st
 APP_NAME = "Banking ORM Tool"
 
 # Country accents: thin rules and small dots only, never fills.
-COUNTRY_ACCENT = {"IL": "#006d7e", "JO": "#9b2f4a",
-                  "Israel": "#006d7e", "Jordan": "#9b2f4a"}
+COUNTRY_ACCENT = {"IL": "#006d7e", "JO": "#9b2f4a", "TR": "#8a6a1f",
+                  "Israel": "#006d7e", "Jordan": "#9b2f4a",
+                  "Turkey": "#8a6a1f"}
 
 THEME_CSS = """
 <style>

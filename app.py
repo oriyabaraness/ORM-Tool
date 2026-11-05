@@ -83,6 +83,7 @@ PUBLICATIONS_INDEX = os.path.join(HERE, "boi_publications_index.csv")
 PROPER_CONDUCT_DIRECTIVES = os.path.join(
     HERE, "boi_proper_conduct_directives.csv")
 JORDAN_CBJ_REGULATIONS = os.path.join(HERE, "jordan_cbj_regulations.csv")
+TURKEY_CBRT_REGULATIONS = os.path.join(HERE, "turkey_cbrt_regulations.csv")
 MANIFEST = os.path.join(HERE, "boi_pdf_text_manifest.csv")
 LOCAL_MANIFEST = os.path.join(HERE, "boi_pdf_text_manifest.local.csv")
 TEXT_DIR = os.path.join(HERE, "boi_texts")
@@ -128,6 +129,13 @@ def load_proper_conduct_metadata(mtime):
         return pd.DataFrame()
     df = pd.read_csv(PROPER_CONDUCT_DIRECTIVES, dtype=str).fillna("")
     return df.drop_duplicates(subset=["url"])
+
+
+@st.cache_data(show_spinner=False)
+def turkey_cbrt_record_count(mtime):
+    if not os.path.exists(TURKEY_CBRT_REGULATIONS):
+        return 0
+    return len(pd.read_csv(TURKEY_CBRT_REGULATIONS, dtype=str))
 
 
 @st.cache_data(show_spinner=False)
@@ -518,7 +526,7 @@ REGIONAL_BANKING_MARKETS = (
         "code": "TR",
         "latitude": 39.93,
         "longitude": 32.86,
-        "regulator": "Central Bank of the Republic of Turkey",
+        "regulator": "Central Bank of the Republic of Turkiye",
         "role": "Comparison target",
     },
     {
@@ -2910,6 +2918,8 @@ def build_regional_map_data(reader_view, query, jordan_docs=None):
         if "full_text_matches" in reader_view.columns:
             israel_hits = int(reader_view["full_text_matches"].fillna(0).sum())
     jordan_matches = len(jordan_docs) if jordan_docs is not None else 0
+    turkey_matches = turkey_cbrt_record_count(
+        file_mtime(TURKEY_CBRT_REGULATIONS))
 
     for market in REGIONAL_BANKING_MARKETS:
         row = dict(market)
@@ -2930,6 +2940,14 @@ def build_regional_map_data(reader_view, query, jordan_docs=None):
             row["coverage"] = f"{jordan_matches:,} CBJ records"
             row["status"] = "Connected external corpus"
             row["radius"] = min(220000, 76000 + jordan_matches * 1400)
+            row["fill_color"] = [26, 132, 108, 210]
+            row["line_color"] = [8, 86, 74, 235]
+        elif market["country"] == "Turkey" and turkey_matches:
+            row["publication_matches"] = turkey_matches
+            row["text_hits"] = 0
+            row["coverage"] = f"{turkey_matches:,} CBRT records"
+            row["status"] = "Connected external corpus"
+            row["radius"] = min(220000, 76000 + turkey_matches * 1400)
             row["fill_color"] = [26, 132, 108, 210]
             row["line_color"] = [8, 86, 74, 235]
         else:

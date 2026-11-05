@@ -134,6 +134,7 @@ CREATE INDEX IF NOT EXISTS ix_dc_cat ON document_category(category_id);
 JURISDICTIONS = (
     ("IL", "Israel", "Bank of Israel – Banking Supervision Department"),
     ("JO", "Jordan", "Central Bank of Jordan"),
+    ("TR", "Turkey", "Central Bank of the Republic of Turkiye"),
 )
 
 

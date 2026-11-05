@@ -1,4 +1,4 @@
-"""Cross-jurisdiction regulatory risk comparison (Israel + Jordan POC).
+"""Cross-jurisdiction regulatory risk comparison (Israel, Jordan, Turkey).
 
 Modules:
     taxonomy  -- risk categories, keyword rules, baseline expectations

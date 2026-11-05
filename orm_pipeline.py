@@ -1,4 +1,4 @@
-"""Build the Israel/Jordan regulatory risk comparison index (orm.db).
+"""Build the Israel/Jordan/Turkey regulatory risk comparison index (orm.db).
 
 Usage:
   python orm_pipeline.py build            # metadata + any cached text (fast, offline)
@@ -49,7 +49,7 @@ def main():
 
     b = sub.add_parser("build", help="ingest, extract text, classify")
     b.add_argument("--fetch", action="store_true", help="download PDFs")
-    b.add_argument("--country", action="append", choices=["IL", "JO"],
+    b.add_argument("--country", action="append", choices=["IL", "JO", "TR"],
                    help="limit to a jurisdiction (repeatable)")
     b.add_argument("--limit", type=int, help="max documents to extract this run")
     b.add_argument("--retry-errors", action="store_true")

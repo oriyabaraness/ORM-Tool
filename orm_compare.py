@@ -21,7 +21,8 @@ from ui_theme import (COUNTRY_ACCENT, citation, e as _e, notice, page_header,
 
 J = queries.JURISDICTIONS
 NAMES = queries.JURISDICTION_NAMES
-REGULATORS = {"IL": "Bank of Israel", "JO": "Central Bank of Jordan"}
+REGULATORS = {"IL": "Bank of Israel", "JO": "Central Bank of Jordan",
+              "TR": "Central Bank of the Republic of Turkiye"}
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPORT_DIR = os.path.join(HERE, "update_reports")
 

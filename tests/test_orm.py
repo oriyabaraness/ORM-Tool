@@ -157,6 +157,17 @@ def test_real_connectors_normalize_repo_csvs():
     assert any(d["ref"] == "No. 8/2024" for d in jo)
 
 
+def test_turkey_cbrt_connector_normalizes_repo_csv():
+    tr = list(sources.cbrt_regulations())
+    assert len(tr) >= 10
+    assert all(d["jurisdiction"] == "TR" for d in tr)
+    assert all(d["id"].startswith("TR-CBRT-") for d in tr)
+    assert len({d["id"] for d in tr}) == len(tr)
+    assert all(d["pdf_url"] and ".pdf" in d["pdf_url"].lower() for d in tr)
+    assert any(d["ref"] == "No. 6493" for d in tr)
+    assert "TR" in queries.JURISDICTIONS
+
+
 # --- end to end -----------------------------------------------------------------
 
 def test_pipeline_builds_comparable_index(built_db):

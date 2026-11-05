@@ -8,8 +8,8 @@ import pandas as pd
 
 from . import db, taxonomy
 
-JURISDICTIONS = ("IL", "JO")
-JURISDICTION_NAMES = {"IL": "Israel", "JO": "Jordan"}
+JURISDICTIONS = ("IL", "JO", "TR")
+JURISDICTION_NAMES = {"IL": "Israel", "JO": "Jordan", "TR": "Turkey"}
 
 
 def _df(conn: sqlite3.Connection, sql: str, params=()) -> pd.DataFrame:

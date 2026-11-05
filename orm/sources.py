@@ -20,6 +20,7 @@ import pandas as pd
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BOI_PROPER_CONDUCT = os.path.join(HERE, "boi_proper_conduct_directives.csv")
 CBJ_REGULATIONS = os.path.join(HERE, "jordan_cbj_regulations.csv")
+CBRT_REGULATIONS = os.path.join(HERE, "turkey_cbrt_regulations.csv")
 
 
 def _clean(value) -> str:
@@ -120,9 +121,48 @@ def cbj_regulations(path: str = CBJ_REGULATIONS) -> Iterable[dict]:
     return docs
 
 
+_CBRT_REF = re.compile(r"\b(?:Law\s+)?No[:.]?\s*\(?\s*(\d{4}/\d+|\d+)\s*\)?", re.I)
+_CBRT_DOC_ID = re.compile(r"/connect/([0-9a-f-]{36})/")
+
+
+def cbrt_regulations(path: str = CBRT_REGULATIONS) -> Iterable[dict]:
+    """Central Bank of the Republic of Turkiye (CBRT) legal framework PDFs."""
+    if not os.path.exists(path):
+        return []
+    df = pd.read_csv(path, dtype=str)
+    docs = []
+    seen: set[str] = set()
+    for _, row in df.iterrows():
+        title = _clean(row.get("title"))
+        url = _clean(row.get("url"))
+        if not title:
+            continue
+        m = _CBRT_DOC_ID.search(url)
+        doc_id = f"TR-CBRT-{m.group(1)[:8] if m else _slug(title)}"
+        if doc_id in seen:
+            continue
+        seen.add(doc_id)
+        ref = _CBRT_REF.search(title)
+        docs.append({
+            "id": doc_id,
+            "jurisdiction": "TR",
+            "regulator": "Central Bank of the Republic of Turkiye",
+            "ref": f"No. {ref.group(1)}" if ref else "",
+            "title": title,
+            "subject": _clean(row.get("category")),
+            "url": _clean(row.get("source_url")) or url,
+            "pdf_url": url if ".pdf" in url.lower() else None,
+            "published": "",
+            "lastmod": _clean(row.get("last_seen"))[:10],
+            "source": "turkey_cbrt_regulations.csv",
+        })
+    return docs
+
+
 CONNECTORS: dict[str, tuple[str, Callable[[], Iterable[dict]]]] = {
     "boi_proper_conduct": ("IL", boi_proper_conduct),
     "cbj_regulations": ("JO", cbj_regulations),
+    "cbrt_regulations": ("TR", cbrt_regulations),
 }
 
 
