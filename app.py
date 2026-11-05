@@ -24,6 +24,18 @@ import pydeck as pdk
 import requests
 import streamlit as st
 
+# Always load this project's own modules from this folder, even if another
+# copy of the project (or a stale module with the same name) is on Python's
+# path -- otherwise an older orm_compare / orm could be picked up instead.
+_APP_DIR = os.path.dirname(os.path.abspath(__file__))
+if not sys.path or os.path.abspath(sys.path[0] or ".") != _APP_DIR:
+    sys.path.insert(0, _APP_DIR)
+for _name in list(sys.modules):
+    if _name in ("orm", "orm_compare", "ui_theme") or _name.startswith("orm."):
+        _file = getattr(sys.modules[_name], "__file__", None) or ""
+        if not os.path.abspath(_file).startswith(_APP_DIR + os.sep):
+            del sys.modules[_name]
+
 from banking_sector_indicators import (
     OUTPUT as BANKING_SECTOR_INDICATORS,
     refresh as refresh_banking_sector_indicators,
@@ -57,6 +69,11 @@ from overnight_rate_analysis import (
     refresh as refresh_overnight_rate_analysis,
 )
 import orm_compare
+if not hasattr(orm_compare, "page_compare"):
+    st.error("Loaded an outdated orm_compare from "
+             f"{getattr(orm_compare, '__file__', None) or orm_compare.__path__}. "
+             f"Expected {os.path.join(_APP_DIR, 'orm_compare.py')}.")
+    st.stop()
 from ui_theme import APP_NAME, apply_theme, notice, page_header
 
 HERE = os.path.dirname(os.path.abspath(__file__))
