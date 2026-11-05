@@ -181,6 +181,17 @@ Use tabular numerals anywhere numbers line up (counts, dates, hours).
 - Keep the product name out of the code for now: use "the app" or a single
   constant, so renaming later is one change.
 
+## Implementation status (Streamlit stage)
+
+Built: left rail (Compare, Coverage, Gaps, Deadlines, Changes · Sources, Market
+context), shared scope bar remembered across screens, three-pane Compare,
+honest-state notices, status pills, citation lines, serif regulation text,
+CSV exports for Coverage, Gaps and Deadlines. Tokens live in `ui_theme.py`.
+
+Not yet (needs storage or the future stack): Confirm / Reject on suggested
+matches, arrow-key navigation in the clause list, clicking a Coverage cell to
+open Compare (today: pick country + category under the matrix), PDF export.
+
 ## Don't
 
 - Don't bring back the Sefaria / library / bookshelf look.

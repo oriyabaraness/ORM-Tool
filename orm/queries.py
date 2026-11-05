@@ -101,7 +101,7 @@ def category_provisions(conn: sqlite3.Connection, category_id: str,
     params.append(limit)
     df = _df(conn, f"""
         SELECT p.id AS provision_id, d.id AS document_id, d.ref AS doc_ref,
-               d.title AS doc_title, d.pdf_url, p.ref, p.text, pc.score,
+               d.title AS doc_title, d.regulator, d.pdf_url, d.url, p.ref, p.text, pc.score,
                pc.evidence, pc.reviewed
         FROM provision_category pc
         JOIN provision p ON p.id = pc.provision_id
@@ -240,7 +240,7 @@ def clause(conn: sqlite3.Connection, provision_id: int) -> dict | None:
     row = conn.execute("""
         SELECT p.id AS provision_id, p.ref, p.text, d.id AS document_id,
                d.ref AS doc_ref, d.title AS doc_title, d.jurisdiction,
-               d.pdf_url, d.url
+               d.regulator, d.pdf_url, d.url
         FROM provision p JOIN document d ON d.id = p.document_id
         WHERE p.id = ?
     """, (int(provision_id),)).fetchone()
@@ -253,7 +253,7 @@ def equivalents(conn: sqlite3.Connection, provision_id: int,
     df = _df(conn, """
         SELECT m.match_id AS provision_id, m.score, m.text_similarity,
                m.shared_expectations, m.shared_terms,
-               d.jurisdiction, d.ref AS doc_ref, d.title AS doc_title,
+               d.jurisdiction, d.regulator, d.ref AS doc_ref, d.title AS doc_title,
                d.pdf_url, d.url, p.ref, p.text
         FROM provision_match m
         JOIN provision p ON p.id = m.match_id
@@ -304,3 +304,35 @@ def document_provisions(conn: sqlite3.Connection, document_id: str) -> pd.DataFr
         WHERE p.document_id = ?
         ORDER BY p.seq
     """, (document_id,))
+
+
+# --- changes ------------------------------------------------------------------
+
+def changes_since(conn: sqlite3.Connection, since: str,
+                  jurisdictions: tuple[str, ...] = JURISDICTIONS) -> pd.DataFrame:
+    """Documents published or updated on/after `since` (yyyy-mm-dd), newest
+    first, with the risk categories they are mapped to."""
+    marks = ",".join("?" * len(jurisdictions))
+    return _df(conn, f"""
+        SELECT d.id AS document_id, d.jurisdiction, d.regulator, d.ref AS doc_ref,
+               d.title AS doc_title, d.published, d.lastmod,
+               MAX(COALESCE(NULLIF(d.published, ''), ''), COALESCE(d.lastmod, ''))
+                 AS changed,
+               d.text_status, d.pdf_url, d.url,
+               COALESCE((SELECT GROUP_CONCAT(rc.name, ', ')
+                  FROM document_category dc JOIN risk_category rc
+                    ON rc.id = dc.category_id
+                  WHERE dc.document_id = d.id), '') AS categories
+        FROM document d
+        WHERE d.jurisdiction IN ({marks})
+          AND MAX(COALESCE(NULLIF(d.published, ''), ''), COALESCE(d.lastmod, '')) >= ?
+        ORDER BY changed DESC, d.jurisdiction, d.ref
+    """, (*jurisdictions, since))
+
+
+def provision_expectations(conn: sqlite3.Connection, provision_id: int) -> list[str]:
+    """Labels of the baseline checklist items one clause satisfies."""
+    labels = {e.id: e.label for _c, e in taxonomy.ALL_EXPECTATIONS}
+    rows = conn.execute("SELECT DISTINCT expectation_id FROM expectation_hit "
+                        "WHERE provision_id = ?", (int(provision_id),)).fetchall()
+    return [labels.get(r[0], r[0]) for r in rows]

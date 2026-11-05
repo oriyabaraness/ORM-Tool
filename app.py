@@ -1,5 +1,5 @@
 """
-ORM Tool -- a Streamlit UI over the crawl/extract pipeline.
+Banking ORM Tool -- a Streamlit UI over the crawl/extract pipeline.
 
   Design direction: see DESIGN.md (regulatory risk comparison workspace).
 Run with:  streamlit run app.py   (from inside the .venv)
@@ -56,7 +56,8 @@ from overnight_rate_analysis import (
     RATE_OUTPUT as OVERNIGHT_RATE_COMPARISON,
     refresh as refresh_overnight_rate_analysis,
 )
-from orm_compare import render_risk_compare_section
+import orm_compare
+from ui_theme import APP_NAME, apply_theme, notice, page_header
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 LINKS = os.path.join(HERE, "boi_pdf_links.csv")
@@ -71,8 +72,9 @@ TEXT_DIR = os.path.join(HERE, "boi_texts")
 INDEX_LOG = os.path.join(HERE, "boi_pdf_text_index.log")
 INDEX_PID = os.path.join(HERE, "boi_pdf_text_index.pid")
 
-st.set_page_config(page_title="ORM Tool",
-                   page_icon="🏦", layout="wide")
+st.set_page_config(page_title=APP_NAME,
+                   page_icon=":material/account_balance:", layout="wide",
+                   initial_sidebar_state="expanded")
 
 
 @st.cache_data(show_spinner=False)
@@ -3427,640 +3429,6 @@ def load_proper_conduct_directives():
     return prepare_proper_conduct_directives(directives)
 
 
-def apply_library_styles():
-    st.markdown(
-        """
-        <style>
-        :root {
-            --boi-navy: #17345b;
-            --boi-navy-hover: #102845;
-            --boi-ink: #222222;
-            --boi-muted: #666666;
-            --boi-line: #ddddda;
-            --boi-search: #ececea;
-            --boi-paper: #ffffff;
-            --boi-page: #f7f7f5;
-            --boi-banner: #eef5ff;
-            --boi-banner-border: #d6e5ff;
-            --boi-teal: #006d7e;
-            --boi-blue: #6fa6bd;
-            --boi-gold: #c0ad5c;
-            --boi-green: #5f986c;
-            --boi-rose: #9b2f4a;
-            --boi-purple: #5d3f85;
-            --boi-serif: Georgia, "Times New Roman", serif;
-            --boi-ui: ui-sans-serif, system-ui, -apple-system,
-                BlinkMacSystemFont, "Segoe UI", Inter, Arial, sans-serif;
-        }
-
-        .stApp {
-            background: var(--boi-page);
-        }
-
-        .block-container {
-            max-width: 1280px;
-            padding-top: 1rem;
-            padding-bottom: 3.25rem;
-            background: var(--boi-paper);
-        }
-
-        [data-testid="stSidebar"] {
-            display: none;
-        }
-
-        h1, h2, h3, p, div, span, label, button, input {
-            letter-spacing: 0;
-            font-family: var(--boi-ui);
-        }
-
-        a {
-            color: var(--boi-navy);
-        }
-
-        .boi-topbar {
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) max-content;
-            align-items: center;
-            column-gap: clamp(0.8rem, 2vw, 1.5rem);
-            border-bottom: 1px solid var(--boi-line);
-            min-height: 68px;
-            padding: 0.25rem 0;
-            margin-bottom: 0;
-            background: var(--boi-paper);
-        }
-
-        .boi-brand {
-            color: var(--boi-ink);
-            flex: 1 1 auto;
-            min-width: 0;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            font-size: clamp(1rem, 1.28vw, 1.22rem);
-            font-weight: 700;
-            line-height: 1.2;
-        }
-
-        .boi-nav {
-            display: flex;
-            align-items: center;
-            justify-content: flex-end;
-            flex-wrap: nowrap;
-            min-width: max-content;
-            gap: clamp(0.72rem, 1.5vw, 1.6rem);
-            color: var(--boi-muted);
-            font-size: clamp(0.82rem, 0.95vw, 1rem);
-            font-weight: 650;
-            line-height: 1.45;
-            white-space: nowrap;
-        }
-
-        .boi-nav span {
-            flex: 0 0 auto;
-        }
-
-        .boi-nav span:first-child {
-            color: var(--boi-navy);
-            font-weight: 650;
-        }
-
-        .boi-library-head {
-            display: grid;
-            grid-template-columns: minmax(0, 760px) minmax(290px, 340px);
-            justify-content: center;
-            gap: clamp(2rem, 5vw, 5rem);
-            align-items: start;
-            padding: 4.8rem 0 2.3rem;
-            margin-bottom: 0.5rem;
-        }
-
-        .boi-kicker {
-            color: var(--boi-muted);
-            font-size: 0.82rem;
-            font-weight: 750;
-            margin-bottom: 0.45rem;
-            text-transform: uppercase;
-        }
-
-        .boi-page-title {
-            color: var(--boi-muted);
-            font-size: clamp(1.45rem, 2.1vw, 1.85rem);
-            font-weight: 750;
-            line-height: 1.2;
-            margin: 0 0 1.7rem;
-        }
-
-        h1.boi-page-title {
-            color: var(--boi-muted) !important;
-            font-size: clamp(1.45rem, 2.1vw, 1.85rem) !important;
-            line-height: 1.2 !important;
-        }
-
-        .boi-language-toggle {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            border: 1px solid var(--boi-line);
-            border-radius: 999px;
-            padding: 0.3rem 0.7rem;
-            color: var(--boi-muted);
-            font-size: 0.82rem;
-            background: var(--boi-paper);
-        }
-
-        .boi-language-toggle strong {
-            color: var(--boi-ink);
-            font-weight: 650;
-        }
-
-        .boi-shelf {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            column-gap: 1.6rem;
-            row-gap: 2rem;
-            border-top: 0;
-            margin-top: 1.2rem;
-        }
-
-        .boi-shelf-item {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 0.55rem;
-            align-items: start;
-            border-bottom: 0;
-            padding: 0;
-        }
-
-        .boi-shelf-item::before {
-            content: "";
-            display: block;
-            height: 4px;
-            width: 100%;
-            margin-bottom: 0.55rem;
-            background: var(--boi-teal);
-        }
-
-        .boi-shelf-item:nth-child(2)::before {
-            background: var(--boi-blue);
-        }
-
-        .boi-shelf-item:nth-child(3)::before {
-            background: var(--boi-gold);
-        }
-
-        .boi-shelf-title {
-            color: var(--boi-ink);
-            font-family: var(--boi-serif);
-            font-size: clamp(1.45rem, 2vw, 1.82rem);
-            font-weight: 400;
-            line-height: 1.15;
-        }
-
-        .boi-shelf-copy {
-            color: var(--boi-muted);
-            font-size: 0.98rem;
-            line-height: 1.42;
-        }
-
-        .boi-shelf-count {
-            color: var(--boi-muted);
-            font-size: 0.86rem;
-            font-weight: 650;
-            white-space: nowrap;
-        }
-
-        .boi-catalog-shelf {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            column-gap: clamp(1.2rem, 3vw, 2rem);
-            row-gap: 2.15rem;
-            margin: 1.15rem 0 1.85rem;
-        }
-
-        .boi-catalog-type {
-            min-width: 0;
-            padding: 0;
-        }
-
-        .boi-catalog-rule {
-            height: 4px;
-            width: 100%;
-            margin-bottom: 0.65rem;
-        }
-
-        .boi-catalog-title {
-            color: #050505;
-            font-family: var(--boi-serif);
-            font-size: clamp(1.35rem, 2vw, 1.82rem);
-            font-weight: 400;
-            line-height: 1.15;
-            margin-bottom: 0.65rem;
-        }
-
-        .boi-catalog-copy {
-            color: var(--boi-muted);
-            font-size: 0.98rem;
-            font-weight: 520;
-            line-height: 1.42;
-            max-width: 38rem;
-        }
-
-        .boi-catalog-meta {
-            color: var(--boi-muted);
-            font-size: 0.84rem;
-            font-weight: 700;
-            margin-top: 0.75rem;
-        }
-
-        .boi-compare-panel {
-            display: grid;
-            gap: 1rem;
-            margin: 0.9rem 0 1.4rem;
-            padding: 1rem;
-            border: 1px solid var(--boi-line);
-            border-radius: 6px;
-            background: #fbfbfa;
-        }
-
-        .boi-compare-head {
-            display: flex;
-            justify-content: space-between;
-            gap: 1rem;
-            align-items: start;
-        }
-
-        .boi-compare-title {
-            color: var(--boi-ink);
-            font-family: var(--boi-serif);
-            font-size: clamp(1.25rem, 1.8vw, 1.55rem);
-            line-height: 1.15;
-        }
-
-        .boi-compare-count {
-            color: var(--boi-navy);
-            font-size: 0.86rem;
-            font-weight: 800;
-            white-space: nowrap;
-        }
-
-        .boi-compare-venn {
-            position: relative;
-            height: 160px;
-            max-width: 390px;
-            margin: 0.2rem auto;
-        }
-
-        .boi-compare-circle {
-            position: absolute;
-            top: 8px;
-            display: grid;
-            place-items: center;
-            align-content: center;
-            width: 150px;
-            height: 150px;
-            border: 2px solid rgba(23, 52, 91, 0.45);
-            border-radius: 50%;
-            color: var(--boi-navy);
-            background: rgba(0, 109, 126, 0.16);
-            text-align: center;
-        }
-
-        .boi-compare-circle.right {
-            right: 0;
-            border-color: rgba(95, 152, 108, 0.65);
-            color: #2b6843;
-            background: rgba(95, 152, 108, 0.17);
-        }
-
-        .boi-compare-circle.left {
-            left: 0;
-        }
-
-        .boi-compare-circle strong {
-            font-size: 1rem;
-        }
-
-        .boi-compare-circle span,
-        .boi-compare-overlap span {
-            color: var(--boi-muted);
-            font-size: 0.78rem;
-            font-weight: 700;
-        }
-
-        .boi-compare-overlap {
-            position: absolute;
-            left: 50%;
-            top: 50%;
-            z-index: 2;
-            display: grid;
-            place-items: center;
-            width: 92px;
-            min-height: 62px;
-            padding: 0.5rem;
-            transform: translate(-50%, -50%);
-            border: 1px solid var(--boi-line);
-            border-radius: 6px;
-            background: rgba(255, 255, 255, 0.92);
-            box-shadow: rgba(0, 0, 0, 0.08) 0 4px 18px;
-            color: var(--boi-ink);
-            text-align: center;
-        }
-
-        .boi-compare-overlap strong {
-            font-size: 1.45rem;
-            line-height: 1;
-        }
-
-        .boi-compare-grid {
-            display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 0.8rem;
-        }
-
-        .boi-compare-grid > div {
-            display: grid;
-            gap: 0.55rem;
-            min-width: 0;
-        }
-
-        .boi-compare-grid b {
-            color: var(--boi-ink);
-            font-size: 0.9rem;
-            line-height: 1.25;
-        }
-
-        .boi-compare-chip {
-            display: inline-block;
-            margin: 0 0.35rem 0.35rem 0;
-            padding: 0.25rem 0.5rem;
-            border: 1px solid var(--boi-line);
-            border-radius: 999px;
-            color: var(--boi-navy);
-            background: var(--boi-paper);
-            font-size: 0.76rem;
-            font-weight: 700;
-        }
-
-        .boi-compare-chip.muted {
-            color: var(--boi-muted);
-        }
-
-        .boi-info-panel {
-            border-top: 1px solid var(--boi-line);
-            border-bottom: 0;
-            padding: 1.25rem 0 0;
-        }
-
-        .boi-info-panel + .boi-info-panel {
-            margin-top: 1.65rem;
-        }
-
-        .boi-panel-title {
-            color: var(--boi-muted);
-            font-size: clamp(1.25rem, 1.8vw, 1.55rem);
-            font-weight: 750;
-            margin-bottom: 0.9rem;
-        }
-
-        .boi-panel-copy, .boi-panel-list {
-            color: var(--boi-muted);
-            font-size: 0.96rem;
-            line-height: 1.52;
-        }
-
-        .boi-panel-list {
-            display: grid;
-            gap: 0.55rem;
-            margin-top: 0.75rem;
-        }
-
-        .boi-section-rule {
-            border-top: 1px solid var(--boi-line);
-            margin: 1.4rem 0 1.2rem;
-        }
-
-        .boi-section-title {
-            color: var(--boi-ink);
-            font-size: 1.45rem;
-            font-weight: 750;
-            margin: 0 0 0.6rem;
-        }
-
-        h2.boi-section-title {
-            color: var(--boi-ink) !important;
-            font-size: 1.45rem !important;
-            line-height: 1.2 !important;
-        }
-
-        div[data-testid="stSegmentedControl"] {
-            margin: 0.75rem 0 0.2rem;
-        }
-
-        div[data-testid="stButtonGroup"] {
-            margin: 0.75rem 0 0.2rem;
-        }
-
-        div[data-testid="stButtonGroup"] button {
-            border-color: var(--boi-line) !important;
-            background: var(--boi-paper) !important;
-            color: var(--boi-ink) !important;
-        }
-
-        div[data-testid="stButtonGroup"]
-        button[data-testid="stBaseButton-segmented_controlActive"] {
-            border-color: var(--boi-navy) !important;
-            background: rgba(23, 52, 91, 0.08) !important;
-            color: var(--boi-navy) !important;
-        }
-
-        div[data-testid="stButtonGroup"]
-        button[data-testid="stBaseButton-segmented_controlActive"] p {
-            color: var(--boi-navy) !important;
-        }
-
-        div[data-testid="stMetric"] {
-            background: var(--boi-paper);
-            border: 1px solid var(--boi-line);
-            border-radius: 6px;
-            padding: 0.75rem 0.9rem;
-        }
-
-        div[data-testid="stTextInput"] input,
-        div[data-testid="stSelectbox"] div[data-baseweb="select"] > div,
-        div[data-testid="stMultiSelect"] div[data-baseweb="select"] > div {
-            background: var(--boi-search);
-            border-color: transparent;
-            border-radius: 18px;
-        }
-
-        .stButton > button,
-        .stDownloadButton > button,
-        div[data-testid="stLinkButton"] a {
-            border-radius: 4px;
-            border-color: var(--boi-navy);
-        }
-
-        .stButton > button[kind="primary"],
-        .stDownloadButton > button[kind="primary"],
-        div[data-testid="stLinkButton"] a {
-            background: var(--boi-navy);
-            color: white;
-            box-shadow: rgba(0, 0, 0, 0.18) 0 2px 6px;
-        }
-
-        .stButton > button:hover,
-        .stDownloadButton > button:hover,
-        div[data-testid="stLinkButton"] a:hover {
-            border-color: var(--boi-navy-hover);
-            color: var(--boi-navy-hover);
-        }
-
-        .stButton > button[kind="primary"]:hover,
-        .stDownloadButton > button[kind="primary"]:hover,
-        div[data-testid="stLinkButton"] a:hover {
-            background: var(--boi-navy-hover);
-            color: white;
-        }
-
-        div[data-testid="stDataFrame"],
-        div[data-testid="stDataEditor"] {
-            border-color: var(--boi-line);
-        }
-
-        @media (max-width: 820px) {
-            .boi-library-head {
-                display: block;
-                padding-top: 2.5rem;
-            }
-
-            .boi-shelf {
-                grid-template-columns: 1fr;
-            }
-
-            .boi-catalog-shelf {
-                grid-template-columns: 1fr;
-            }
-
-            .boi-compare-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .boi-nav {
-                font-size: 0.74rem;
-                gap: 0.42rem;
-            }
-
-            .boi-shelf-copy {
-                margin-top: 0.35rem;
-            }
-
-            .boi-shelf-count {
-                margin-top: 0.65rem;
-            }
-        }
-        </style>
-        """,
-        unsafe_allow_html=True)
-
-
-def render_library_shell(catalog, directives, jordan_docs=None):
-    country_catalog = build_country_catalog(catalog, jordan_docs)
-    pdf_count = len(get_pdf_catalog(catalog, directives))
-    numbered = (
-        int(directives["directive_number"].str.len().gt(0).sum())
-        if not directives.empty else 0)
-    latest = directives["lastmod"].max()[:10] if not directives.empty else "n/a"
-    manifest = load_text_manifest(
-        (file_mtime(MANIFEST), file_mtime(LOCAL_MANIFEST)))
-    indexed_docs = 0
-    if not manifest.empty:
-        ok = manifest[manifest["status"].astype(str).str.lower() == "ok"]
-        indexed_docs = len(ok.drop_duplicates(subset=["doc_url"]))
-
-    st.markdown(
-        f"""
-        <div class="boi-topbar">
-            <div class="boi-brand">ORM Tool</div>
-            <div class="boi-nav">
-                <span>Catalog</span>
-                <span>Directives</span>
-                <span>Reader</span>
-                <span>Search</span>
-            </div>
-        </div>
-        <div class="boi-library-head">
-            <div>
-                <div class="boi-kicker">Library</div>
-                <h1 class="boi-page-title">Browse the Library</h1>
-                <div class="boi-language-toggle">
-                    <strong>English</strong><span>Hebrew source data</span>
-                </div>
-                <div class="boi-shelf">
-                    <div class="boi-shelf-item">
-                        <div class="boi-shelf-title">Catalog</div>
-                        <div class="boi-shelf-copy">
-                            Official Bank of Israel publication links,
-                            regional source records, metadata, source pages,
-                            and extractable documents.
-                        </div>
-                        <div class="boi-shelf-count">
-                            {len(country_catalog):,} docs / {
-                                country_catalog['country'].nunique():,} countries
-                        </div>
-                    </div>
-                    <div class="boi-shelf-item">
-                        <div class="boi-shelf-title">Reader</div>
-                        <div class="boi-shelf-copy">
-                            Searchable PDFs, including Proper Conduct directives,
-                            with extracted text, highlighted matches, page
-                            navigation, and downloadable sources.
-                        </div>
-                        <div class="boi-shelf-count">
-                            {pdf_count:,} PDFs / {numbered:,} directives
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div>
-                <div class="boi-info-panel">
-                    <div class="boi-panel-title">A Living BOI Library</div>
-                    <div class="boi-panel-copy">
-                        A compact index for Bank of Israel publications,
-                        supervisory materials, and directive PDFs.
-                    </div>
-                </div>
-                <div class="boi-info-panel">
-                    <div class="boi-panel-title">Current Index</div>
-                    <div class="boi-panel-list">
-                        <div>{len(directives):,} proper conduct directives</div>
-                        <div>{indexed_docs:,} full-text PDFs indexed</div>
-                        <div>Latest directive update: {latest}</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True)
-
-    sections = [
-        "Catalog",
-        "Reader",
-        "Regional Map",
-        "Risk Compare",
-    ]
-    _, selector_col, _ = st.columns([1, 2, 1])
-    with selector_col:
-        selected = st.segmented_control(
-            "Library section",
-            sections,
-            default="Catalog",
-            key="library_section",
-            label_visibility="collapsed",
-            width="stretch")
-    st.markdown('<div class="boi-section-rule"></div>', unsafe_allow_html=True)
-    return selected or "Catalog"
-
-
 def render_section_heading(title):
     st.markdown(
         f'<h2 class="boi-section-title">{title}</h2>',
@@ -4068,7 +3436,6 @@ def render_section_heading(title):
 
 
 def render_catalog_section(catalog, jordan_docs=None):
-    render_section_heading("Catalog")
     catalog = build_country_catalog(catalog, jordan_docs)
     query = st.text_input(
         "Search title / URL",
@@ -4113,7 +3480,6 @@ def render_catalog_section(catalog, jordan_docs=None):
 
     view = order_catalog_by_publication_type(view)
     st.markdown(f"**{len(view):,}** documents match.")
-    render_catalog_type_shelf(view)
 
     display = view[[
         "country", "source_title", "publication_type", "doc_type", "lastmod",
@@ -4189,7 +3555,6 @@ def render_country_publication_browser(country_view, country, key_prefix):
             f"No connected publication records are available for {country} yet.")
         return
 
-    render_catalog_type_shelf(country_view)
     query = st.text_input(
         f"Search {country} publications",
         placeholder="annual report, directives, exchange rates, stability",
@@ -4233,7 +3598,6 @@ def render_regional_map_section(
         catalog, directives, jordan_docs=None, jordan_reports=None,
         jordan_reserves=None, jordan_fx_rates=None, overnight_rates=None,
         israel_reserve_rows=None, banking_indicators=None):
-    render_section_heading("Regional Banking Map")
     pdf_catalog = get_pdf_catalog(catalog, directives)
     if jordan_docs is None:
         jordan_docs = load_jordan_cbj_regulations(
@@ -4272,9 +3636,8 @@ def render_regional_map_section(
         directive_stats["recent_label"])
 
     st.caption(
-        "This layer is separated from the Reader. It is the workspace for "
-        "comparing Bank of Israel publications with regional banking "
-        "regulators as additional country corpora are connected.")
+        "Regulators in the region. Israel and Jordan are connected; the others "
+        "are mapped and will appear once their publication feeds are added.")
     selected_from_map = render_regional_banking_map(
         pdf_catalog, "", jordan_corpus)
 
@@ -4335,7 +3698,6 @@ def render_regional_map_section(
         return
 
     st.subheader("Jordan Publications")
-    render_catalog_type_shelf(selected_country_view)
     st.caption(
         "Showing connected Central Bank of Jordan publication feeds. Use the "
         "source-specific sections below to search and refresh each feed.")
@@ -4614,7 +3976,6 @@ def render_regional_map_section(
 def render_reader_section(
         catalog, directives, jordan_docs=None, israel_fx_docs=None,
         overnight_rates=None, overnight_fx_context=None):
-    render_section_heading("Search Inside All PDFs")
     pdf_catalog = get_pdf_catalog(catalog, directives)
     country_catalog = build_country_catalog(catalog, jordan_docs)
     directive_comparison_catalog = build_directive_comparison_catalog(
@@ -4976,53 +4337,107 @@ def render_reader_section(
         render_pdf_viewer(viewer_model)
 
 
-apply_library_styles()
 
-if not os.path.exists(LINKS):
-    st.warning(
-        "No catalog yet. Run **`python3 boi_pdf_extractor.py`** first to build "
-        "`boi_pdf_links.csv`, then reload this page.")
-    st.stop()
+# --- pages ----------------------------------------------------------------------
 
-catalog = load_catalog(file_mtime(LINKS))
-directives = load_proper_conduct_directives()
-ensure_jordan_financial_stability_reports()
-ensure_jordan_foreign_exchange_reserves()
-ensure_jordan_fx_rates()
-ensure_israel_boi_fx_reserves()
-ensure_overnight_rate_analysis()
-ensure_banking_sector_indicators()
-jordan_regulations = load_jordan_cbj_regulations(
-    file_mtime(JORDAN_CBJ_REGULATIONS))
-jordan_reports = load_jordan_financial_stability_reports(
-    file_mtime(JORDAN_CBJ_FINANCIAL_STABILITY_REPORTS))
-jordan_reserves = load_jordan_foreign_exchange_reserves(
-    file_mtime(JORDAN_CBJ_FOREIGN_EXCHANGE_RESERVES))
-jordan_fx_rates = load_jordan_fx_rates(file_mtime(JORDAN_CBJ_FX_RATES))
-israel_fx_reserves = load_israel_boi_fx_reserves(
-    file_mtime(ISRAEL_BOI_FX_RESERVES_INDEX))
-israel_fx_reserve_rows = load_israel_boi_fx_reserves_data(
-    file_mtime(ISRAEL_BOI_FX_RESERVES_DATA))
-overnight_rates = load_overnight_rate_comparison(
-    file_mtime(OVERNIGHT_RATE_COMPARISON))
-overnight_fx_context = load_overnight_fx_context(
-    file_mtime(OVERNIGHT_FX_CONTEXT))
-banking_indicators = load_banking_sector_indicators(
-    file_mtime(BANKING_SECTOR_INDICATORS))
-jordan_docs = combine_jordan_docs(
-    jordan_regulations, jordan_reports, jordan_reserves, jordan_fx_rates)
-section = render_library_shell(catalog, directives, jordan_docs)
+def _require_catalog():
+    if not os.path.exists(LINKS):
+        st.markdown(notice(
+            "<b>No document catalog yet.</b> Run <code>python3 boi_pdf_extractor.py</code> "
+            "to build <code>boi_pdf_links.csv</code>, then reload this page."),
+            unsafe_allow_html=True)
+        st.stop()
 
-if section == "Catalog":
-    render_catalog_section(catalog, jordan_docs)
-elif section == "Reader":
-    render_reader_section(
-        catalog, directives, jordan_docs, israel_fx_reserves,
-        overnight_rates, overnight_fx_context)
-elif section == "Risk Compare":
-    render_risk_compare_section()
-else:
+
+def _load_sources():
+    """Everything the Sources and Market context screens read."""
+    _require_catalog()
+    catalog = load_catalog(file_mtime(LINKS))
+    directives = load_proper_conduct_directives()
+    ensure_jordan_financial_stability_reports()
+    ensure_jordan_foreign_exchange_reserves()
+    ensure_jordan_fx_rates()
+    ensure_israel_boi_fx_reserves()
+    ensure_overnight_rate_analysis()
+    ensure_banking_sector_indicators()
+    data = {
+        "catalog": catalog,
+        "directives": directives,
+        "jordan_regulations": load_jordan_cbj_regulations(
+            file_mtime(JORDAN_CBJ_REGULATIONS)),
+        "jordan_reports": load_jordan_financial_stability_reports(
+            file_mtime(JORDAN_CBJ_FINANCIAL_STABILITY_REPORTS)),
+        "jordan_reserves": load_jordan_foreign_exchange_reserves(
+            file_mtime(JORDAN_CBJ_FOREIGN_EXCHANGE_RESERVES)),
+        "jordan_fx_rates": load_jordan_fx_rates(file_mtime(JORDAN_CBJ_FX_RATES)),
+        "israel_fx_reserves": load_israel_boi_fx_reserves(
+            file_mtime(ISRAEL_BOI_FX_RESERVES_INDEX)),
+        "israel_fx_reserve_rows": load_israel_boi_fx_reserves_data(
+            file_mtime(ISRAEL_BOI_FX_RESERVES_DATA)),
+        "overnight_rates": load_overnight_rate_comparison(
+            file_mtime(OVERNIGHT_RATE_COMPARISON)),
+        "overnight_fx_context": load_overnight_fx_context(
+            file_mtime(OVERNIGHT_FX_CONTEXT)),
+        "banking_indicators": load_banking_sector_indicators(
+            file_mtime(BANKING_SECTOR_INDICATORS)),
+    }
+    data["jordan_docs"] = combine_jordan_docs(
+        data["jordan_regulations"], data["jordan_reports"],
+        data["jordan_reserves"], data["jordan_fx_rates"])
+    return data
+
+
+def page_sources():
+    page_header("Sources", "The original documents: the full catalog, and a reader to "
+                "search inside every PDF and open it beside its extracted text.")
+    d = _load_sources()
+    catalog_tab, reader_tab = st.tabs(["Catalog", "Search and read PDFs"])
+    with catalog_tab:
+        render_catalog_section(d["catalog"], d["jordan_docs"])
+    with reader_tab:
+        render_reader_section(
+            d["catalog"], d["directives"], d["jordan_docs"],
+            d["israel_fx_reserves"], d["overnight_rates"], d["overnight_fx_context"])
+
+
+def page_market():
+    page_header("Market context", "Regulators covered, their connected publication "
+                "feeds, and macro indicators (FX reserves, rates, banking-sector data).")
+    d = _load_sources()
     render_regional_map_section(
-        catalog, directives, jordan_regulations, jordan_reports,
-        jordan_reserves, jordan_fx_rates, overnight_rates,
-        israel_fx_reserve_rows, banking_indicators)
+        d["catalog"], d["directives"], d["jordan_regulations"], d["jordan_reports"],
+        d["jordan_reserves"], d["jordan_fx_rates"], d["overnight_rates"],
+        d["israel_fx_reserve_rows"], d["banking_indicators"])
+
+
+apply_theme()
+
+PAGES = {
+    "compare": st.Page(orm_compare.page_compare, title="Compare",
+                       icon=":material/compare_arrows:", url_path="compare",
+                       default=True),
+    "coverage": st.Page(orm_compare.page_coverage, title="Coverage",
+                        icon=":material/grid_view:", url_path="coverage"),
+    "gaps": st.Page(orm_compare.page_gaps, title="Gaps",
+                    icon=":material/rule:", url_path="gaps"),
+    "deadlines": st.Page(orm_compare.page_deadlines, title="Deadlines",
+                         icon=":material/schedule:", url_path="deadlines"),
+    "changes": st.Page(orm_compare.page_changes, title="Changes",
+                       icon=":material/update:", url_path="changes"),
+    "sources": st.Page(page_sources, title="Sources",
+                       icon=":material/description:", url_path="sources"),
+    "market": st.Page(page_market, title="Market context",
+                      icon=":material/monitoring:", url_path="market"),
+}
+orm_compare.PAGES = PAGES
+
+nav = st.navigation({
+    APP_NAME: [PAGES["compare"], PAGES["coverage"], PAGES["gaps"],
+               PAGES["deadlines"], PAGES["changes"]],
+    "Reference": [PAGES["sources"], PAGES["market"]],
+}, position="sidebar")
+st.sidebar.markdown(
+    '<div class="app-rail-foot">Israel · Jordan<br>'
+    'Bank of Israel and Central Bank of Jordan regulation, mapped to one risk '
+    'taxonomy.</div>', unsafe_allow_html=True)
+nav.run()

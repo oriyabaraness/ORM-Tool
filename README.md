@@ -2,6 +2,11 @@
 
 Banking ORM tool: compares banking regulatory risk across countries (Israel, Jordan), plus a Bank of Israel publications explorer.
 
+The app opens on **Compare**. The left menu has the comparison workspace
+(Compare, Coverage, Gaps, Deadlines, Changes) and the reference screens
+(Sources: catalog and PDF reader; Market context: regional map and macro
+data). Design rules are in `DESIGN.md`; shared styles in `ui_theme.py`.
+
 ## Run locally
 
 ```bash

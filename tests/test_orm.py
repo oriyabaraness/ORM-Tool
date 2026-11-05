@@ -224,6 +224,9 @@ def _fake_streamlit(rendered):
     st.dataframe = lambda df, **_: rendered.append(df.to_string())
     st.rerun = lambda: None
     st.container = lambda *a, **k: _Ctx()
+    st.multiselect = lambda label, options, default=None, **_: list(default or [])
+    st.date_input = lambda label, value=None, **_: value
+    st.switch_page = lambda page: None
     st.session_state = {}
     st.column_config = types.SimpleNamespace(NumberColumn=lambda *a, **k: None)
     return st
@@ -233,6 +236,7 @@ def test_risk_compare_section_renders(built_db, monkeypatch):
     rendered: list[str] = []
     monkeypatch.setitem(sys.modules, "streamlit", _fake_streamlit(rendered))
     sys.modules.pop("orm_compare", None)
+    sys.modules.pop("ui_theme", None)
     orm_compare = importlib.import_module("orm_compare")
     orm_compare.render_risk_compare_section(built_db)
     page = "\n".join(rendered)
@@ -240,8 +244,9 @@ def test_risk_compare_section_renders(built_db, monkeypatch):
     assert "Israel" in page and "Jordan" in page
     assert "<mark>recovery</mark>" in page.lower() or "<mark>Recovery</mark>" in page
     assert "within 24 hours" in page
-    assert "not found" in page
+    assert "Not found" in page            # gap status pill
     assert "Equivalent in Jordan" in page
+    assert "Bank of Israel · <b>Directive 999" in page   # citation line
     assert "Article 1" in page
 
 
@@ -333,6 +338,7 @@ def test_full_directive_tab_renders(built_db, monkeypatch):
     rendered: list[str] = []
     monkeypatch.setitem(sys.modules, "streamlit", _fake_streamlit(rendered))
     sys.modules.pop("orm_compare", None)
+    sys.modules.pop("ui_theme", None)
     orm_compare = importlib.import_module("orm_compare")
     with db.session(built_db) as conn:
         orm_compare.render_full_directive(conn, "IL", "op_resilience")
@@ -386,3 +392,21 @@ def test_update_reports_new_and_changed_documents(built_db, tmp_path, monkeypatc
     assert [(d["id"], d["why"]) for d in report.changed] == [("IL-TEST-1", "page updated")]
     text = (tmp_path / "r" / "latest.txt").read_text(encoding="utf-8")
     assert "New documents: 1" in text and "New climate instructions" in text
+
+
+
+def test_workspace_pages_render_honest_states(built_db, monkeypatch):
+    rendered: list[str] = []
+    monkeypatch.setitem(sys.modules, "streamlit", _fake_streamlit(rendered))
+    sys.modules.pop("orm_compare", None)
+    sys.modules.pop("ui_theme", None)
+    orm_compare = importlib.import_module("orm_compare")
+    orm_compare.page_coverage(built_db)
+    orm_compare.page_gaps(built_db)
+    orm_compare.page_changes(built_db)
+    page = "\n".join(rendered)
+    assert "Clauses indexed" in page and "Titles only" in page   # coverage legend
+    assert "Not assessed" in page or "Found" in page
+    assert '<h1 class="page-title">Changes</h1>' in page
+    # fixture documents are older than the default 90-day window: honest empty state
+    assert "No documents in this scope were published or updated since" in page
