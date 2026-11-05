@@ -4,6 +4,7 @@ Text fixtures below are short synthetic passages written for the tests; they
 are not quotations of any regulator's text.
 """
 import contextlib
+import datetime as dt
 import importlib
 import os
 import sys
@@ -447,3 +448,125 @@ def test_workspace_pages_render_honest_states(built_db, monkeypatch):
     assert '<h1 class="page-title">Changes</h1>' in page
     # fixture documents are older than the default 90-day window: honest empty state
     assert "No documents in this scope were published or updated since" in page
+
+
+# --- ORM Analysis Standard (RDL) ---------------------------------------------------
+
+from orm import grammar, rdl, scores, verdicts  # noqa: E402
+
+IL_NOTIFY = ("A banking corporation shall notify the Supervisor of Banks of any "
+             "significant operational incident within 24 hours of identifying it.")
+JO_REPORT = ("Banks shall report any disruption of critical operations to the "
+             "Central Bank within three (3) business days.")
+
+
+def test_grammar_codes_the_words_not_the_intent():
+    must, = grammar.parse(IL_NOTIFY)
+    assert (must.force, must.addressee, must.action, must.target, must.object,
+            must.trigger, must.measure_hours, must.control_type) == (
+        "MUST", "Institution", "notify", "regulator", "incident", "On an event",
+        24.0, "Corrective")
+    assert must.notation().startswith("MUST | Institution -> notify(regulator)")
+    should, = grammar.parse("Banks should review the outsourcing policy annually.")
+    assert should.force == "SHOULD" and should.frequency == "Annually"
+    banned, = grammar.parse("The bank shall not outsource its internal audit function.")
+    assert (banned.force, banned.action) == ("MUST-NOT", "restrict")
+    allowed, = grammar.parse("A bank shall be entitled to appoint an external auditor.")
+    assert allowed.force == "MAY"
+
+
+def test_grammar_one_obligation_per_record_and_passive_agent():
+    approve, review = grammar.parse("The board of directors shall approve the "
+                                    "business continuity plan and review it at "
+                                    "least once a year.")
+    assert (approve.addressee, approve.action, approve.control_type) == (
+        "Board", "approve", "Governance")
+    assert (review.action, review.frequency, review.frequency_months) == (
+        "review", "Annually", 12)
+    passive, = grammar.parse("The policy shall be approved by the board of directors.")
+    assert (passive.addressee, passive.action, passive.object) == (
+        "Board", "approve", "policy")
+
+
+def test_verdict_reads_home_toward_target():
+    jo = [r.as_row() for r in grammar.parse(JO_REPORT)]
+    il = [r.as_row() for r in grammar.parse(IL_NOTIFY)]
+    v = verdicts.pair_verdict(jo, il, "Jordan", "Israel")
+    assert (v.verdict, v.decided_by) == (rdl.STRICTER, "measure")
+    assert "24 hours (Israel)" in v.reason
+    assert verdicts.pair_verdict(il, jo, "Israel", "Jordan").verdict == rdl.LOOSER
+    assert rdl.invert(rdl.STRICTER) == rdl.LOOSER
+    test = [r.as_row() for r in grammar.parse("Banks shall test the plan annually.")]
+    assert verdicts.pair_verdict(test, il).verdict == rdl.DIFFERENT
+    assert verdicts.pair_verdict([], il).verdict == rdl.NOT_ASSESSED
+    weaker = [r.as_row() for r in grammar.parse(
+        "Banks should notify the Supervisor of any significant operational "
+        "incident within 24 hours of identifying it.")]
+    v = verdicts.pair_verdict(weaker, il)
+    assert (v.verdict, v.decided_by) == (rdl.STRICTER, "force")
+
+
+def test_authority_map_keeps_other_regulators_out_of_gaps(built_db):
+    assert rdl.authority("TR", "op_resilience").scope == rdl.OTHER
+    assert "BDDK" in rdl.authority("TR", "op_resilience").authority
+    assert rdl.authority("TR", "payments").scope == rdl.IN_SCOPE
+    assert rdl.authority("IL", "op_resilience").scope == rdl.IN_SCOPE
+    gap = verdicts.unmatched_verdict("TR", "incident_reporting", target_has_text=True)
+    assert gap.verdict == rdl.NOT_ASSESSED and "BDDK" in gap.reason
+    assert verdicts.unmatched_verdict("JO", "aml", True).verdict == rdl.GAP
+    with db.session(built_db) as conn:
+        table = queries.expectation_table(conn, "op_resilience")
+    assert set(table["TR_status"]) == {"other authority"}
+
+
+def test_pipeline_stores_records_verdicts_and_keeps_reviews(built_db):
+    with db.session(built_db) as conn:
+        n_rec = conn.execute("SELECT COUNT(*) FROM obligation_record").fetchone()[0]
+        assert n_rec >= 5
+        row = conn.execute("SELECT provision_id, match_id, category_id, verdict "
+                           "FROM provision_verdict WHERE verdict = ?",
+                           (rdl.STRICTER,)).fetchone()
+        assert row is not None
+        verdicts.review(conn, row[0], row[1], row[2], 1, row[3])
+        conn.commit()
+        pipeline.classify_all(conn)
+        judged = queries.pair_verdicts(conn, row[0], row[2])
+        assert judged[row[1]]["review"] == 1
+
+
+def test_scores_and_delta_statement(built_db):
+    with db.session(built_db) as conn:
+        il = scores.intensity(conn, "IL", "op_resilience")
+        assert il["rii"] is not None and 0 <= il["rii"] <= 100
+        assert il["grade"] == "B" and il["bindingness"] == 1.0
+        assert scores.intensity(conn, "TR", "op_resilience")["grade"] == "C"
+        items = scores.readiness_items(conn, "JO", "IL")
+        summary = scores.readiness(items)
+        assert summary["stricter"] >= 1 and summary["assessed"] >= 1
+        line = scores.delta_statement("Jordan", "Israel", items)
+        assert line.startswith("Entering Israel from Jordan:")
+        assert "Entry Readiness" in line and rdl.VERSION in line
+        turkey = scores.delta_statement(
+            "Israel", "Turkey", scores.readiness_items(conn, "IL", "TR"))
+        assert "not assessed yet" in turkey
+    assert scores._recency("2000-01-01") == 0.0
+    assert scores._recency(dt.date.today().isoformat()) == 1.0
+
+
+def test_delta_page_and_coded_clause_render(built_db, monkeypatch):
+    rendered: list[str] = []
+    monkeypatch.setitem(sys.modules, "streamlit", _fake_streamlit(rendered))
+    sys.modules.pop("orm_compare", None)
+    sys.modules.pop("ui_theme", None)
+    orm_compare = importlib.import_module("orm_compare")
+    orm_compare.page_delta(built_db)
+    orm_compare.page_coverage(built_db)
+    page = "\n".join(rendered)
+    assert "Entering Jordan from Israel" in page
+    assert "Entry Readiness" in page and "Intensity" in page
+    assert "Other authority" in page          # Turkey's BDDK areas on Coverage
+    with db.session(built_db) as conn:
+        pid = conn.execute("SELECT provision_id FROM obligation_record "
+                           "LIMIT 1").fetchone()[0]
+        html = orm_compare.render_rdl_records(queries.obligation_records(conn, pid))
+    assert "Coded obligations" in html and "MUST |" in html

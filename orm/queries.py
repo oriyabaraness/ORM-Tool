@@ -6,7 +6,7 @@ import sqlite3
 
 import pandas as pd
 
-from . import db, taxonomy
+from . import db, rdl, taxonomy, verdicts
 
 JURISDICTIONS = ("IL", "JO", "TR")
 JURISDICTION_NAMES = {"IL": "Israel", "JO": "Jordan", "TR": "Turkey"}
@@ -136,9 +136,11 @@ def expectation_table(conn: sqlite3.Connection, category_id: str) -> pd.DataFram
     """Gap analysis for one category.
 
     status per jurisdiction:
-        found        -- at least one provision matches the expectation
-        not found    -- the jurisdiction has text in this category but no match
-        not assessed -- no text available yet for this category
+        found           -- at least one provision matches the expectation
+        not found       -- the jurisdiction has text in this category but no match
+        not assessed    -- no text available yet for this category
+        other authority -- another body writes these rules (RDL Layer 1),
+                           so silence is never reported as a gap
     """
     cat = taxonomy.BY_ID[category_id]
     rows = []
@@ -169,6 +171,9 @@ def expectation_table(conn: sqlite3.Connection, category_id: str) -> pd.DataFram
             else:
                 status = "not found" if assessed else "not assessed"
                 source = evidence = ""
+                auth = rdl.authority(j, category_id)
+                if auth.scope == rdl.OTHER:
+                    status, evidence = "other authority", auth.authority
             row[f"{j}_status"] = status
             row[f"{j}_source"] = source
             row[f"{j}_evidence"] = evidence
@@ -351,3 +356,26 @@ def provision_expectations(conn: sqlite3.Connection, provision_id: int) -> list[
     rows = conn.execute("SELECT DISTINCT expectation_id FROM expectation_hit "
                         "WHERE provision_id = ?", (int(provision_id),)).fetchall()
     return [labels.get(r[0], r[0]) for r in rows]
+
+
+# --- ORM Analysis Standard (RDL) ------------------------------------------------
+
+def obligation_records(conn: sqlite3.Connection, provision_id: int) -> list[dict]:
+    """The clause coded into the obligation grammar (Layer 2)."""
+    return verdicts.records_by_provision(conn, [int(provision_id)]).get(
+        int(provision_id), [])
+
+
+def pair_verdicts(conn: sqlite3.Connection, provision_id: int,
+                  category_id: str) -> dict[int, dict]:
+    """Layer 4 verdicts for a clause's matches, keyed by the matched clause,
+    with any specialist review (status 1 confirmed, -1 rejected)."""
+    rows = conn.execute("""
+        SELECT v.match_id, v.verdict, v.decided_by, v.reason,
+               r.status AS review, r.verdict AS reviewed_verdict
+        FROM provision_verdict v
+        LEFT JOIN verdict_review r ON r.provision_id = v.provision_id
+             AND r.match_id = v.match_id AND r.category_id = v.category_id
+        WHERE v.provision_id = ? AND v.category_id = ?
+    """, (int(provision_id), category_id)).fetchall()
+    return {r["match_id"]: dict(r) for r in rows}

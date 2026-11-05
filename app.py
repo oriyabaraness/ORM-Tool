@@ -4459,6 +4459,8 @@ PAGES = {
                          icon=":material/schedule:", url_path="deadlines"),
     "changes": st.Page(orm_compare.page_changes, title="Changes",
                        icon=":material/update:", url_path="changes"),
+    "delta": st.Page(orm_compare.page_delta, title="Delta",
+                     icon=":material/change_history:", url_path="delta"),
     "sources": st.Page(page_sources, title="Sources",
                        icon=":material/description:", url_path="sources"),
     "market": st.Page(page_market, title="Market context",
@@ -4468,11 +4470,11 @@ orm_compare.PAGES = PAGES
 
 nav = st.navigation({
     APP_NAME: [PAGES["compare"], PAGES["coverage"], PAGES["gaps"],
-               PAGES["deadlines"], PAGES["changes"]],
+               PAGES["deadlines"], PAGES["changes"], PAGES["delta"]],
     "Reference": [PAGES["sources"], PAGES["market"]],
 }, position="sidebar")
 st.sidebar.markdown(
-    '<div class="app-rail-foot">Israel · Jordan<br>'
-    'Bank of Israel and Central Bank of Jordan regulation, mapped to one risk '
-    'taxonomy.</div>', unsafe_allow_html=True)
+    '<div class="app-rail-foot">Israel · Jordan · Turkey<br>'
+    'Bank of Israel, Central Bank of Jordan and CBRT regulation, read under '
+    'the ORM Analysis Standard (RDL).</div>', unsafe_allow_html=True)
 nav.run()

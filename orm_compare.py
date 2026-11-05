@@ -1,4 +1,5 @@
-"""The comparison workspace: Compare, Coverage, Gaps, Deadlines and Changes.
+"""The comparison workspace: Compare, Coverage, Gaps, Deadlines, Changes and
+Delta (the ORM Analysis Standard's home -> target view).
 
 Each screen is a page function that app.py registers in the left rail. They
 share one scope (country, countries to compare with, risk category) that is
@@ -15,7 +16,7 @@ import re
 import pandas as pd
 import streamlit as st
 
-from orm import classify, db, match, pipeline, queries, taxonomy
+from orm import classify, db, match, pipeline, queries, rdl, scores, taxonomy, verdicts
 from ui_theme import (COUNTRY_ACCENT, citation, e as _e, notice, page_header,
                       pane_head, pill)
 
@@ -38,7 +39,13 @@ STATUS = {
     "found": ("Found", "found"),
     "not found": ("Not found", "not-found"),
     "not assessed": ("Not assessed", "not-assessed"),
+    "other authority": ("Other authority", "not-assessed"),
 }
+# RDL Layer 4 verdicts, coloured by what the client has to do.
+VERDICT_KIND = {rdl.EQUIVALENT: "found", rdl.LOOSER: "found",
+                rdl.STRICTER: "gap", rdl.DIFFERENT: "partial",
+                scores.NEW_CONTROL: "partial", rdl.GAP: "not-found",
+                rdl.NOT_ASSESSED: "not-assessed"}
 STRENGTH_KIND = {"Strong match": "strong", "Partial match": "partial",
                  "Weak match": "weak"}
 
@@ -58,6 +65,17 @@ CSS = """
 .ws-match {background: var(--surface); border: 1px solid var(--line); border-radius: 6px;
   padding: 10px 12px 12px; margin: 0 0 10px;}
 .ws-match .top {display: flex; align-items: center; gap: 8px; margin-bottom: 6px;}
+.ws-rdl {margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px;}
+.ws-rdl .h {font-size: 11.5px; color: var(--ink-3); font-weight: 600; margin-bottom: 4px;
+  text-transform: uppercase; letter-spacing: .04em;}
+.ws-rdl code {display: block; white-space: pre-wrap; font-size: 11.5px; line-height: 17px;
+  color: var(--ink-2); background: var(--subtle); border-radius: 4px; padding: 4px 7px;
+  margin: 0 0 4px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;}
+.ws-verdict {font-size: 12px; color: var(--ink-2); margin: 2px 0 6px;}
+.ws-delta {font-size: 15px; line-height: 22px; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); border-left: 3px solid var(--primary); border-radius: 6px;
+  padding: 12px 14px; margin: 4px 0 14px;}
+.ws-score {font-size: 11.5px; color: var(--ink-3); margin-top: 3px;}
 .ws-match .bar {flex: 1; height: 3px; background: var(--subtle); border-radius: 2px;}
 .ws-match .bar span {display: block; height: 3px; background: var(--primary); border-radius: 2px;}
 .ws-match .ws-scroll {max-height: 300px;}
@@ -296,6 +314,15 @@ def challenge_clause(home_text: str, candidates: list[dict], country_name: str,
             "shared": shared}
 
 
+def render_rdl_records(records: list[dict]) -> str:
+    """The clause coded in RDL notation (Layer 2), one line per obligation."""
+    if not records:
+        return ""
+    lines = "".join(f'<code>{_e(r["notation"])}</code>' for r in records)
+    return (f'<div class="ws-rdl"><div class="h">Coded obligations · {rdl.VERSION}</div>'
+            f'{lines}</div>')
+
+
 def render_clause_explorer(conn, country: str, category_id: str,
                            others: list[str] | None = None) -> None:
     """Three panes: clause list · selected clause · equivalents per country."""
@@ -348,7 +375,8 @@ def render_clause_explorer(conn, country: str, category_id: str,
                         n = int(c["matches"])
                         if n:
                             state = _plural(n, "equivalent")
-                        elif any(other_has_text.values()):
+                        elif any(other_has_text[o] and rdl.authority(o, category_id).scope
+                                 != rdl.OTHER for o in others):
                             state = "possible gap"
                         else:
                             state = "not assessed"
@@ -374,7 +402,9 @@ def render_clause_explorer(conn, country: str, category_id: str,
             f'<div class="ws-selected">{_cite(clause)}'
             f'<div class="law ws-scroll">'
             f'{_highlight(clause["text"], classify.matched_keywords(category_id, clause["text"]))}'
-            f'</div><div>{tags}{checklist}</div></div>', unsafe_allow_html=True)
+            f'</div><div>{tags}{checklist}</div>'
+            f'{render_rdl_records(queries.obligation_records(conn, selected_id))}</div>',
+            unsafe_allow_html=True)
 
     with right:
         matches = queries.equivalents(conn, selected_id, category_id)
@@ -385,7 +415,13 @@ def render_clause_explorer(conn, country: str, category_id: str,
                                   count=_plural(len(mj), "suggestion") if len(mj) else ""),
                         unsafe_allow_html=True)
             if mj.empty:
-                if not other_has_text[j]:
+                auth = rdl.authority(j, category_id)
+                if auth.scope == rdl.OTHER:
+                    msg = (f"<b>Not assessed.</b> In {NAMES[j]}, {_e(auth.authority)} "
+                           "writes the rules for this area, and it isn't indexed yet. "
+                           "This is not a gap.")
+                    st.markdown(notice(msg), unsafe_allow_html=True)
+                elif not other_has_text[j]:
                     msg = (f"<b>Not assessed.</b> {NAMES[j]} has no indexed text in "
                            "this category yet, so it can't be compared.")
                     st.markdown(notice(msg), unsafe_allow_html=True)
@@ -414,7 +450,7 @@ def render_clause_explorer(conn, country: str, category_id: str,
                                     unsafe_allow_html=True)
                 continue
             showed_match = True
-            cards = []
+            judged = queries.pair_verdicts(conn, selected_id, category_id)
             for _, m in mj.iterrows():
                 strength = match.strength(m["score"])
                 width = max(6, min(100, int(m["score"] * 160)))
@@ -422,16 +458,43 @@ def render_clause_explorer(conn, country: str, category_id: str,
                               for x in m["shared_expectation_labels"])
                 terms = (f'<div class="ws-why">Shared terms: {_e(m["shared_terms"])}</div>'
                          if m["shared_terms"] else "")
-                cards.append(
+                v = judged.get(int(m["provision_id"]))
+                verdict_html = ""
+                if v:
+                    review = {1: " · confirmed", -1: " · rejected"}.get(v["review"], "")
+                    verdict_html = (
+                        f'{pill(v["verdict"], VERDICT_KIND.get(v["verdict"], "na"))}'
+                        f'<div class="ws-verdict">{_e(NAMES[j])} vs {_e(NAMES[country])}: '
+                        f'{_e(v["reason"] or "")}{review}</div>')
+                st.markdown(
                     f'<div class="ws-match"><div class="top">'
                     f'{pill(strength, STRENGTH_KIND[strength])}'
                     f'<div class="bar"><span style="width:{width}%"></span></div></div>'
+                    f'{verdict_html}'
                     f'{_cite(m)}<div class="law ws-scroll">{_highlight(m["text"], [])}</div>'
-                    f'<div>{why}</div>{terms}</div>')
-            st.markdown("".join(cards), unsafe_allow_html=True)
+                    f'<div>{why}</div>{terms}</div>', unsafe_allow_html=True)
+                if v:
+                    mid_id = int(m["provision_id"])
+                    c_ok, c_no = st.columns(2)
+                    with c_ok:
+                        if st.button("Confirm verdict", key=f"ws_vok_{selected_id}_{mid_id}",
+                                     width="stretch"):
+                            verdicts.review(conn, selected_id, mid_id, category_id, 1,
+                                            v["verdict"])
+                            conn.commit()
+                            st.rerun()
+                    with c_no:
+                        if st.button("Reject", key=f"ws_vno_{selected_id}_{mid_id}",
+                                     width="stretch"):
+                            verdicts.review(conn, selected_id, mid_id, category_id, -1,
+                                            v["verdict"])
+                            conn.commit()
+                            st.rerun()
         if showed_match:
             st.caption("Suggested matches, ranked by text similarity and shared checklist "
-                       "items within the same risk category. Confirm before relying on them.")
+                       "items within the same risk category. The verdict reads the other "
+                       f"country against {NAMES[country]} ({rdl.VERSION}); confirm it before "
+                       "it goes into client work.")
 
 
 # --- Compare: full directive ----------------------------------------------------
@@ -571,6 +634,10 @@ def render_jurisdiction_column(conn, category_id: str, j: str, query: str) -> No
 
 def _cell(row, j: str) -> str:
     level = row[f"{j}_level"]
+    if row.get(f"{j}_scope") == rdl.OTHER and level != "text":
+        return (f'{pill("Other authority", "na")}<div class="n" style="margin-top:4px">'
+                f'{_e(row.get(f"{j}_authority", ""))}</div>'
+                '<div class="sub">rules written outside the indexed regulator</div>')
     docs, text_docs, provs = row[f"{j}_docs"], row[f"{j}_docs_text"], row[f"{j}_provisions"]
     label, kind = LEVEL[level]
     if level == "none":
@@ -585,8 +652,13 @@ def _cell(row, j: str) -> str:
     latest = row[f"{j}_latest"]
     if latest and level != "none":
         sub = f"{sub} · latest {latest[:10]}" if sub else f"latest {latest[:10]}"
+    score = ""
+    rii = row.get(f"{j}_rii")
+    if rii is not None and not pd.isna(rii):
+        score = (f'<div class="ws-score">Intensity {float(rii):.0f}/100 · '
+                 f'grade {_e(row.get(f"{j}_grade", ""))}</div>')
     return (f'{pill(label, kind)}<div class="n" style="margin-top:4px">{_e(main)}</div>'
-            f'<div class="sub">{_e(sub)}</div>')
+            f'<div class="sub">{_e(sub)}</div>{score}')
 
 
 def render_matrix(matrix, countries: list[str] | None = None) -> None:
@@ -607,12 +679,24 @@ def render_matrix(matrix, countries: list[str] | None = None) -> None:
         unsafe_allow_html=True)
 
 
+def with_intensity(conn, matrix: pd.DataFrame) -> pd.DataFrame:
+    """Add each cell's Intensity Index, grade and authority (RDL Layers 1, 5)."""
+    table = scores.intensity_table(conn, J, matrix["category_id"].tolist())
+    out = matrix.copy()
+    for j in J:
+        tj = table[table["jurisdiction"] == j].set_index("category_id")
+        for col in ("rii", "grade", "scope", "authority"):
+            out[f"{j}_{col}"] = out["category_id"].map(tj[col])
+    return out
+
+
 def render_coverage_legend() -> None:
     st.markdown(
         f'<div class="ws-legend"><span>{pill("Clauses indexed", "found")} text read and '
         f'tagged</span><span>{pill("Titles only", "partial")} mapped from document '
         f'titles, text not indexed yet</span><span>{pill("No coverage", "na")} no '
-        'document mapped</span></div>',
+        'document mapped</span><span>Intensity: how demanding the rules are, 0–100, '
+        'with a confidence grade (A reviewed, B machine, C titles only)</span></div>',
         unsafe_allow_html=True)
 
 
@@ -760,7 +844,7 @@ def page_coverage(path: str | None = None) -> None:
         orm_only = st.toggle("ORM core only", value=st.session_state.get("scope_core", True),
                              key="coverage_core")
         st.session_state["scope_core"] = orm_only
-        matrix = queries.coverage_matrix(conn, orm_only=orm_only)
+        matrix = with_intensity(conn, queries.coverage_matrix(conn, orm_only=orm_only))
         render_coverage_legend()
         c1, c2, c3, c4 = st.columns([1.3, 3, 1.2, 1.4], vertical_alignment="bottom")
         with c1:
@@ -808,7 +892,65 @@ def page_changes(path: str | None = None) -> None:
         render_changes(conn, list(J))
 
 
+def render_delta(conn, home: str, target: str) -> None:
+    """Delta statement + Entry Readiness for one home -> target pair."""
+    items = scores.readiness_items(conn, home, target)
+    summary = scores.readiness(items)
+    st.markdown(pane_head(f"{NAMES[home]} → {NAMES[target]}", country=target),
+                unsafe_allow_html=True)
+    st.markdown(f'<div class="ws-delta">'
+                f'{_e(scores.delta_statement(NAMES[home], NAMES[target], items))}</div>',
+                unsafe_allow_html=True)
+    ready = summary["readiness"]
+    facts = [("Entry Readiness", f"{ready:.0f}%" if ready is not None else "—"),
+             ("Already met", str(summary["met"])),
+             ("Stricter", str(summary["stricter"])),
+             ("New mechanisms", str(summary["new_mechanisms"])),
+             ("Gaps", str(summary["gaps"])),
+             ("Not assessed", str(summary["not_assessed"])),
+             ("Confidence", f"grade {summary['grade']}")]
+    st.markdown('<div class="ws-status">' + "".join(
+        f"<span><b>{_e(k)}</b> · {_e(v)}</span>" for k, v in facts) + "</div>",
+        unsafe_allow_html=True)
+    if items.empty:
+        st.markdown(notice("Nothing to compare yet: neither country has indexed text in "
+                           "the ORM categories."), unsafe_allow_html=True)
+        return
+    order = {rdl.STRICTER: 0, scores.NEW_CONTROL: 1, rdl.DIFFERENT: 2, rdl.GAP: 3,
+             rdl.EQUIVALENT: 4, rdl.LOOSER: 5, rdl.NOT_ASSESSED: 6}
+    view = items.assign(_o=items["verdict"].map(order).fillna(9)).sort_values(
+        ["_o", "category"]).drop(columns=["_o", "category_id"])
+    view = view.assign(text=view["text"].map(lambda t: _short(t, 220)))
+    st.dataframe(
+        view[["verdict", "category", "reason", "target_clause", "home_clause",
+              "reviewed", "text"]],
+        hide_index=True, width="stretch",
+        column_config={"verdict": "Verdict", "category": "Risk category",
+                       "reason": "Why",
+                       "target_clause": f"{NAMES[target]} clause",
+                       "home_clause": f"{NAMES[home]} clause",
+                       "reviewed": "Confirmed", "text": "Wording"})
+    st.download_button(
+        f"Export {NAMES[home]} → {NAMES[target]} delta (CSV)",
+        view.to_csv(index=False).encode("utf-8"),
+        f"delta_{home}_to_{target}.csv", "text/csv", key=f"ws_delta_{home}_{target}")
+
+
+def page_delta(path: str | None = None) -> None:
+    page_header("Delta", "What a firm from one country must change to operate in "
+                "another, under the ORM Analysis Standard.")
+    with _open(path) as conn:
+        render_status(conn)
+        scope = scope_bar(conn, "delta", category=False)
+        for target in scope["compare"]:
+            render_delta(conn, scope["country"], target)
+        st.caption(f"{rdl.VERSION}. Verdicts are machine-made until a specialist "
+                   "confirms them on the Compare screen (grade A). Regulatory "
+                   "analysis, not legal advice.")
+
+
 def render_risk_compare_section(path: str | None = None) -> None:
     """Every workspace screen on one page (used by tests and as a fallback)."""
-    for page in (page_compare, page_coverage, page_gaps, page_deadlines, page_changes):
+    for page in (page_compare, page_coverage, page_gaps, page_deadlines, page_changes,
+                 page_delta):
         page(path)

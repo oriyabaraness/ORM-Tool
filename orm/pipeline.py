@@ -6,7 +6,7 @@ import sqlite3
 from typing import Callable
 
 from . import classify as clf
-from . import db, extract, match, sources
+from . import db, extract, grammar, match, sources, verdicts
 
 Log = Callable[[str], None]
 
@@ -79,7 +79,9 @@ def extract_texts(conn: sqlite3.Connection, *, fetch: bool = True,
 
 
 def classify_all(conn: sqlite3.Connection, log: Log = _noop) -> dict[str, int]:
-    """(Re)build every machine-generated tag, attribute and expectation hit."""
+    """(Re)build every machine-generated tag, attribute, expectation hit,
+    obligation record (RDL Layer 2) and directional verdict (Layer 4)."""
+    db.init(conn)
     db.clear_classification(conn)
     doc_cats: dict[str, set[str]] = {}
     for doc in conn.execute("SELECT id, title, subject FROM document"):
@@ -90,7 +92,7 @@ def classify_all(conn: sqlite3.Connection, log: Log = _noop) -> dict[str, int]:
             "method, evidence) VALUES (?,?,?,?,?)",
             [(doc["id"], t.category_id, t.score, t.method, t.evidence) for t in tags])
 
-    n_prov = n_attr = n_exp = 0
+    n_prov = n_attr = n_exp = n_rec = 0
     rows = conn.execute(
         "SELECT p.id, p.document_id, p.text, d.jurisdiction FROM provision p "
         "JOIN document d ON d.id = p.document_id").fetchall()
@@ -110,6 +112,18 @@ def classify_all(conn: sqlite3.Connection, log: Log = _noop) -> dict[str, int]:
             conn.execute("INSERT INTO obligation_attr(provision_id, kind, "
                          "value_text) VALUES (?, 'frequency', ?)", (p["id"], value))
             n_attr += 1
+        for seq, rec in enumerate(grammar.parse(p["text"])):
+            row = rec.as_row()
+            conn.execute(
+                "INSERT INTO obligation_record(provision_id, seq, force, addressee, "
+                "action, target, object, trigger, measure, measure_hours, frequency, "
+                "frequency_months, evidence, proportionality, control_type, sentence, "
+                "notation) VALUES (:pid, :seq, :force, :addressee, :action, :target, "
+                ":object, :trigger, :measure, :measure_hours, :frequency, "
+                ":frequency_months, :evidence, :proportionality, :control_type, "
+                ":sentence, :notation)",
+                {**row, "pid": p["id"], "seq": seq, "notation": rec.notation()})
+            n_rec += 1
         for eid, evidence in clf.match_expectations(p["text"]):
             cat = next(c for c, e in clf.taxonomy.ALL_EXPECTATIONS if e.id == eid)
             conn.execute(
@@ -118,11 +132,14 @@ def classify_all(conn: sqlite3.Connection, log: Log = _noop) -> dict[str, int]:
                 (p["jurisdiction"], cat, eid, p["id"], evidence))
             n_exp += 1
     n_match = match.compute_matches(conn)
+    n_verdict = verdicts.compute_verdicts(
+        conn, {code: name for code, name, _reg in db.JURISDICTIONS})
     db.set_meta(conn, "classified_at", dt.datetime.now().isoformat(timespec="seconds"))
     conn.commit()
     stats = {"documents": len(doc_cats), "tagged_provisions": n_prov,
              "attributes": n_attr, "expectation_hits": n_exp,
-             "clause_matches": n_match}
+             "clause_matches": n_match, "obligation_records": n_rec,
+             "verdicts": n_verdict}
     log(f"classify: {stats}")
     return stats
 

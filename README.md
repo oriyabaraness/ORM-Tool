@@ -100,6 +100,35 @@ operations. Most Turkish prudential banking rules (capital, liquidity, credit
 risk, outsourcing, IT) are issued by the BRSA (BDDK), so Turkey will show few
 matches in those categories until a BDDK feed is added.
 
+## ORM Analysis Standard (RDL)
+
+The tool reads regulation under one fixed method, the **Regulatory Delta
+Language (RDL v1.0)**, so every analysis is coded the same way. Five layers,
+each in its own file under `orm/`:
+
+| Layer | What it does | File |
+|---|---|---|
+| 1 Authority map | Who writes the rules per country and risk area; areas run by another body (e.g. Turkey's BDDK) show "Other authority", never "gap" | `orm/rdl.py` |
+| 2 Obligation grammar | Each clause coded into records: Force, Addressee, Action, Object, Trigger, Measure, Frequency, Evidence, Proportionality | `orm/grammar.py` |
+| 3 Risk lenses | Basel loss event and resilience principle per category; control type per record | `orm/rdl.py`, `orm/grammar.py` |
+| 4 Directional verdicts | Each matched pair judged home → target: Equivalent, Stricter, Looser, Different mechanism, Gap, Not assessed | `orm/verdicts.py` |
+| 5 Scores | Regulatory Intensity Index (0–100), Entry Readiness, Confidence grade A/B/C, delta statement | `orm/scores.py` |
+
+Where it shows in the app:
+
+- **Compare**: the selected clause shows its coded obligations in RDL notation;
+  each equivalent shows its verdict and why, with Confirm / Reject buttons. A
+  confirmed verdict survives index rebuilds and lifts the grade to A.
+- **Coverage**: every cell shows its Intensity score and grade.
+- **Gaps**: areas written by another authority are marked as such.
+- **Delta** (new): the delta statement and Entry Readiness for a home → target
+  pair, with every line item, exportable as CSV.
+
+The vocabulary, authority map and score weights live in `orm/rdl.py`. Changing
+any of them is a change to the standard: bump `VERSION` and add a line to
+`CHANGELOG` there. After pulling a new version, re-code the index with
+`python orm_pipeline.py classify`.
+
 ## Automatic updates
 
 `./update.sh` refreshes everything in one go:

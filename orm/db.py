@@ -15,6 +15,9 @@ Schema (one row per thing, everything joinable):
                         provision that evidences it (drives gap analysis)
     provision_match     a clause's closest equivalents in other jurisdictions,
                         within the same risk category (drives the clause explorer)
+    obligation_record   RDL Layer 2: each clause coded into the obligation grammar
+    provision_verdict   RDL Layer 4: directional verdict for each matched pair
+    verdict_review      a specialist's confirm/reject of a verdict (kept on rebuild)
 """
 from __future__ import annotations
 
@@ -119,6 +122,53 @@ CREATE TABLE IF NOT EXISTS provision_match (
     shared_terms        TEXT,
     PRIMARY KEY (provision_id, category_id, match_id)
 );
+
+-- ORM Analysis Standard (RDL), Layer 2: one row per obligation record
+CREATE TABLE IF NOT EXISTS obligation_record (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    provision_id     INTEGER NOT NULL REFERENCES provision(id) ON DELETE CASCADE,
+    seq              INTEGER NOT NULL,
+    force            TEXT NOT NULL,
+    addressee        TEXT NOT NULL,
+    action           TEXT,
+    target           TEXT,
+    object           TEXT,
+    trigger          TEXT NOT NULL,
+    measure          TEXT,
+    measure_hours    REAL,
+    frequency        TEXT,
+    frequency_months REAL,
+    evidence         TEXT,
+    proportionality  TEXT NOT NULL,
+    control_type     TEXT,
+    sentence         TEXT NOT NULL,
+    notation         TEXT NOT NULL
+);
+
+-- Layer 4: machine verdict for each matched pair, read from the clause's
+-- country (home) toward the matched clause's country (target)
+CREATE TABLE IF NOT EXISTS provision_verdict (
+    provision_id INTEGER NOT NULL REFERENCES provision(id) ON DELETE CASCADE,
+    match_id     INTEGER NOT NULL REFERENCES provision(id) ON DELETE CASCADE,
+    category_id  TEXT NOT NULL,
+    verdict      TEXT NOT NULL,
+    decided_by   TEXT,        -- the part that differed first (force, measure, ...)
+    reason       TEXT,
+    PRIMARY KEY (provision_id, match_id, category_id)
+);
+
+-- Layer 4: a specialist's decision on a verdict; kept when the index is rebuilt
+CREATE TABLE IF NOT EXISTS verdict_review (
+    provision_id INTEGER NOT NULL,
+    match_id     INTEGER NOT NULL,
+    category_id  TEXT NOT NULL,
+    status       INTEGER NOT NULL,   -- 1 confirmed, -1 rejected
+    verdict      TEXT NOT NULL,      -- the verdict that was confirmed or rejected
+    reviewed_at  TEXT NOT NULL,
+    PRIMARY KEY (provision_id, match_id, category_id)
+);
+
+CREATE INDEX IF NOT EXISTS ix_rec_prov ON obligation_record(provision_id);
 
 CREATE TABLE IF NOT EXISTS meta (
     key   TEXT PRIMARY KEY,
@@ -225,6 +275,8 @@ def clear_classification(conn: sqlite3.Connection) -> None:
     conn.execute("DELETE FROM obligation_attr")
     conn.execute("DELETE FROM expectation_hit")
     conn.execute("DELETE FROM provision_match")
+    conn.execute("DELETE FROM obligation_record")
+    conn.execute("DELETE FROM provision_verdict")
 
 
 def search_provisions(conn: sqlite3.Connection, query: str,
