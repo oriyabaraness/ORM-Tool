@@ -30,11 +30,11 @@ import streamlit as st
 _APP_DIR = os.path.dirname(os.path.abspath(__file__))
 if not sys.path or os.path.abspath(sys.path[0] or ".") != _APP_DIR:
     sys.path.insert(0, _APP_DIR)
+# Re-import them fresh on every run, so a long-running app server never keeps
+# an old version in memory after the code is updated (e.g. after git pull).
 for _name in list(sys.modules):
     if _name in ("orm", "orm_compare", "ui_theme") or _name.startswith("orm."):
-        _file = getattr(sys.modules[_name], "__file__", None) or ""
-        if not os.path.abspath(_file).startswith(_APP_DIR + os.sep):
-            del sys.modules[_name]
+        del sys.modules[_name]
 
 from banking_sector_indicators import (
     OUTPUT as BANKING_SECTOR_INDICATORS,
