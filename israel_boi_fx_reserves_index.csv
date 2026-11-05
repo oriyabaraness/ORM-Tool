@@ -1,0 +1,2 @@
+country,regulator,title,category,size,url,source_url,file_type,last_seen,connection_status
+Israel,Bank of Israel,Israel Foreign Exchange Reserves,Foreign Exchange Reserves,13 rows,file:///Users/oriyabaraness/Desktop/orm-revolut/israel_boi_fx_reserves.csv,https://www.boi.org.il/en/communication-and-publications/press-releases/foreign-exchange-reserves-at-the-bank-of-israel-june-2026/,CSV,2026-07-07,fetched_live_boi_foreign_exchange_reserves

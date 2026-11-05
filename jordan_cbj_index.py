@@ -344,14 +344,14 @@ def make_row(title, size="", url="", status="fetched_official_index"):
 def fetch_official_index():
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
     chunks = []
-    deadline = time.monotonic() + 18
+    deadline = time.monotonic() + 90
     total = 0
     try:
         with requests.get(
             SOURCE_URL,
             headers={"User-Agent": "Mozilla/5.0"},
             stream=True,
-            timeout=(10, 5),
+            timeout=(15, 30),
             verify=False,
         ) as response:
             response.raise_for_status()
@@ -359,7 +359,7 @@ def fetch_official_index():
                 if chunk:
                     chunks.append(chunk)
                     total += len(chunk)
-                if total > 900_000 or time.monotonic() > deadline:
+                if total > 6_000_000 or time.monotonic() > deadline:
                     break
     except requests.RequestException as exc:
         print(f"CBJ live fetch incomplete: {exc}")
@@ -381,8 +381,60 @@ def is_title_line(line):
     return line.lower() not in rejects
 
 
+FILE_TYPES = {".pdf": "PDF", ".docx": "DOCX", ".doc": "DOC",
+              ".xlsx": "XLSX", ".xls": "XLS"}
+
+
+def file_type_for(url):
+    path = url.lower().split("?", 1)[0]
+    for ext, label in FILE_TYPES.items():
+        if path.endswith(ext):
+            return label
+    return ""
+
+
+def entry_for_link(anchor):
+    # Climb from a download link to the smallest block holding exactly one
+    # title label. The page renders each file twice (a paged table and a full
+    # card list), and this pairs a link with its own title in either layout.
+    node = anchor.parent
+    while node is not None and node.name != "body":
+        labels = node.find_all("label")
+        if len(labels) == 1:
+            return node, labels[0]
+        if len(labels) > 1:
+            return None, None
+        node = node.parent
+    return None, None
+
+
+def extract_rows_from_items(soup):
+    rows = []
+    for anchor in soup.select("a[href]"):
+        href = anchor["href"]
+        if "root_storage" not in href.lower() and not file_type_for(href):
+            continue
+        entry, label = entry_for_link(anchor)
+        title = clean_text(label.get_text(" ", strip=True)) if label else ""
+        if not title:
+            continue
+        size = next((clean_text(s.get_text()) for s in entry.find_all("span")
+                     if re.fullmatch(r"[\d.,]+\s*[KMG]B",
+                                     clean_text(s.get_text()), re.I)), "")
+        url = urljoin(SOURCE_URL, href)
+        row = make_row(title, size, url)
+        row["file_type"] = file_type_for(url)
+        rows.append(row)
+    return rows
+
+
 def extract_rows_from_html(html):
     soup = BeautifulSoup(html or "", "html.parser")
+    rows = extract_rows_from_items(soup)
+    if rows:
+        return rows
+    # Older page layout without list-item ids. Titles and links are collected
+    # separately here, so only trust them when the counts line up exactly.
     lines = [
         clean_text(line)
         for line in soup.get_text("\n", strip=True).splitlines()
@@ -409,9 +461,10 @@ def extract_rows_from_html(html):
                 pending_size = ""
                 break
 
-    for row, href in zip(rows, pdf_links):
-        row["url"] = href
-        row["file_type"] = "PDF"
+    if len(rows) == len(pdf_links):
+        for row, href in zip(rows, pdf_links):
+            row["url"] = href
+            row["file_type"] = file_type_for(href)
     return rows
 
 
@@ -447,14 +500,52 @@ def write_csv(rows):
         writer.writerows(rows)
 
 
+def read_existing_rows():
+    if not os.path.exists(OUTPUT):
+        return []
+    with open(OUTPUT, newline="", encoding="utf-8") as fh:
+        return list(csv.DictReader(fh))
+
+
+def _norm_title(title):
+    return re.sub(r"\W+", " ", re.sub(r"\s+PDF$", "", title)).strip().lower()
+
+
+def _instruction_numbers(title):
+    numbers = set(re.findall(r"(\d+)\s*[/-]\s*(\d{4})", title))
+    numbers |= set(re.findall(r"No\.?\s*\(?(\d+)\)?\s*of(?: the year)?\s*(\d{4})",
+                              title, re.I))
+    return numbers
+
+
+def _same_instruction(old, new):
+    a, b = _norm_title(old), _norm_title(new)
+    if len(a.split()) >= 3 and len(b.split()) >= 3 and (
+            a.startswith(b) or b.startswith(a)):
+        return True
+    words = lambda t: set(re.findall(r"[a-z]{4,}", t))
+    return bool(_instruction_numbers(old) & _instruction_numbers(new)) and \
+        len(words(a) & words(b)) >= 2
+
+
+def merge_rows(fetched, existing):
+    # The live page often stalls part way, so a fetch rarely has every entry,
+    # and its titles drift (dates appended, wording tweaked). Fetched rows win;
+    # earlier rows are kept only when no fetched row is the same instruction.
+    kept = [row for row in existing
+            if not any(_same_instruction(row["title"], f["title"])
+                       for f in fetched)]
+    return fetched + kept
+
+
 def main():
     html = fetch_official_index()
-    rows = extract_rows_from_html(html)
-    if len(rows) < 5:
-        rows = seeded_rows()
-    rows = dedupe_rows(rows)
+    fetched = extract_rows_from_html(html)
+    existing = read_existing_rows() or seeded_rows()
+    rows = dedupe_rows(merge_rows(fetched, existing))
     write_csv(rows)
-    print(f"Wrote {len(rows)} Jordan CBJ regulation rows to {OUTPUT}")
+    print(f"Wrote {len(rows)} Jordan CBJ regulation rows to {OUTPUT} "
+          f"({len(fetched)} from the live page)")
 
 
 if __name__ == "__main__":

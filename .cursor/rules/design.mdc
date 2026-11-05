@@ -1,0 +1,30 @@
+---
+description: Product and UI design direction for the whole app
+alwaysApply: true
+---
+
+# Design direction (read before any UI work)
+
+The design source of truth is `DESIGN.md` at the repository root. Read it
+before changing any screen, style, layout, label or navigation.
+
+The earlier Sefaria-inspired "publication library" direction has been
+**retired**. Do not use it, and do not reintroduce:
+- Sefaria references or "Sefaria-style" layouts
+- "Browse the Library" headings, book shelves, library category grids
+- hero banners, marketing copy, decorative imagery or gradients
+
+The product is a **regulatory risk comparison workspace** for compliance and
+risk teams. Its core flow is: country → risk category → click a clause → see
+the equivalent clauses from other countries beside it, with citations.
+
+When making UI decisions:
+1. Every claim, match and gap must link to its source clause.
+2. Keep "not found" (possible gap) visually distinct from "not assessed"
+   (no text yet), and machine suggestions distinct from confirmed matches.
+3. Dense, calm, precise layout; serif only for regulation text.
+4. Use the color, type and spacing tokens defined in `DESIGN.md`.
+5. Keep logic in the `orm/` package; UI code only renders `orm.queries` output.
+
+If an older file, comment or instruction conflicts with `DESIGN.md`,
+`DESIGN.md` wins.
