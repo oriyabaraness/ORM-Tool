@@ -30,6 +30,7 @@ PUBLICATIONS_INDEX = os.path.join(HERE, "boi_publications_index.csv")
 PROPER_CONDUCT_DIRECTIVES = os.path.join(
     HERE, "boi_proper_conduct_directives.csv")
 JORDAN_CBJ_REGULATIONS = os.path.join(HERE, "jordan_cbj_regulations.csv")
+TURKEY_CBRT_REGULATIONS = os.path.join(HERE, "turkey_cbrt_regulations.csv")
 MANIFEST = os.path.join(HERE, "boi_pdf_text_manifest.csv")
 LOCAL_MANIFEST = os.path.join(HERE, "boi_pdf_text_manifest.local.csv")
 TEXT_DIR = os.path.join(HERE, "boi_texts")
@@ -76,11 +77,10 @@ def load_proper_conduct_metadata(mtime):
     return df.drop_duplicates(subset=["url"])
 
 
-@st.cache_data(show_spinner=False)
-def load_jordan_cbj_regulations(mtime):
-    if not os.path.exists(JORDAN_CBJ_REGULATIONS):
+def _load_country_regulations(path):
+    if not os.path.exists(path):
         return pd.DataFrame()
-    df = pd.read_csv(JORDAN_CBJ_REGULATIONS, dtype=str).fillna("")
+    df = pd.read_csv(path, dtype=str).fillna("")
     expected = (
         "country", "regulator", "title", "category", "size", "url",
         "source_url", "file_type", "last_seen", "connection_status")
@@ -88,6 +88,16 @@ def load_jordan_cbj_regulations(mtime):
         if column not in df.columns:
             df[column] = ""
     return df.drop_duplicates(subset=["title", "url"])
+
+
+@st.cache_data(show_spinner=False)
+def load_jordan_cbj_regulations(mtime):
+    return _load_country_regulations(JORDAN_CBJ_REGULATIONS)
+
+
+@st.cache_data(show_spinner=False)
+def load_turkey_cbrt_regulations(mtime):
+    return _load_country_regulations(TURKEY_CBRT_REGULATIONS)
 
 
 @st.cache_data(show_spinner=False)
@@ -243,7 +253,7 @@ REGIONAL_BANKING_MARKETS = (
         "code": "TR",
         "latitude": 39.93,
         "longitude": 32.86,
-        "regulator": "Central Bank of the Republic of Turkey",
+        "regulator": "Central Bank of the Republic of Turkiye",
         "role": "Comparison target",
     },
     {
@@ -337,7 +347,8 @@ def with_publication_type(df):
     return result
 
 
-def build_regional_map_data(reader_view, query, jordan_docs=None):
+def build_regional_map_data(reader_view, query, jordan_docs=None,
+                            turkey_docs=None):
     rows = []
     israel_matches = len(reader_view) if reader_view is not None else 0
     israel_hits = 0
@@ -345,6 +356,7 @@ def build_regional_map_data(reader_view, query, jordan_docs=None):
         if "full_text_matches" in reader_view.columns:
             israel_hits = int(reader_view["full_text_matches"].fillna(0).sum())
     jordan_matches = len(jordan_docs) if jordan_docs is not None else 0
+    turkey_matches = len(turkey_docs) if turkey_docs is not None else 0
 
     for market in REGIONAL_BANKING_MARKETS:
         row = dict(market)
@@ -367,6 +379,14 @@ def build_regional_map_data(reader_view, query, jordan_docs=None):
             row["radius"] = min(220000, 76000 + jordan_matches * 1400)
             row["fill_color"] = [26, 132, 108, 210]
             row["line_color"] = [8, 86, 74, 235]
+        elif market["country"] == "Turkey" and turkey_matches:
+            row["publication_matches"] = turkey_matches
+            row["text_hits"] = 0
+            row["coverage"] = f"{turkey_matches:,} CBRT regulation records"
+            row["status"] = "Connected external corpus"
+            row["radius"] = min(220000, 76000 + turkey_matches * 1400)
+            row["fill_color"] = [26, 132, 108, 210]
+            row["line_color"] = [8, 86, 74, 235]
         else:
             row["publication_matches"] = 0
             row["text_hits"] = 0
@@ -379,8 +399,10 @@ def build_regional_map_data(reader_view, query, jordan_docs=None):
     return pd.DataFrame(rows)
 
 
-def render_regional_banking_map(reader_view, query, jordan_docs=None):
-    map_data = build_regional_map_data(reader_view, query, jordan_docs)
+def render_regional_banking_map(reader_view, query, jordan_docs=None,
+                                turkey_docs=None):
+    map_data = build_regional_map_data(
+        reader_view, query, jordan_docs, turkey_docs)
     layers = [
         pdk.Layer(
             "ScatterplotLayer",
@@ -1432,78 +1454,42 @@ def render_catalog_section(catalog):
         st.success(f"Extracted {len(chosen)} document(s).")
 
 
-def render_regional_map_section(catalog, directives):
-    render_section_heading("Regional Banking Map")
-    pdf_catalog = get_pdf_catalog(catalog, directives)
-    jordan_docs = load_jordan_cbj_regulations(
-        file_mtime(JORDAN_CBJ_REGULATIONS))
-    connected_feeds = 1 if not jordan_docs.empty else 0
-    pending_feeds = max(
-        0, len(REGIONAL_BANKING_MARKETS) - 1 - connected_feeds)
-
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Mapped markets", f"{len(REGIONAL_BANKING_MARKETS):,}")
-    m2.metric("BOI PDFs", f"{len(pdf_catalog):,}")
-    m3.metric("Jordan CBJ records", f"{len(jordan_docs):,}")
-    m4.metric("Other feeds", f"{pending_feeds:,} pending")
-
+def render_regulator_table(docs, country, regulator, short, source_url,
+                           script, csv_name, placeholder):
+    st.subheader(f"{regulator} Regulations")
     st.caption(
-        "This layer is separated from the Reader. It is the workspace for "
-        "comparing Bank of Israel publications with regional banking "
-        "regulators as additional country corpora are connected.")
-    render_regional_banking_map(pdf_catalog, "", jordan_docs)
+        f"Source: official {regulator} regulations listing. "
+        f"Run `python {script}` to refresh the local snapshot.")
+    st.link_button(f"Open {short} regulations source", source_url)
 
-    markets = build_regional_map_data(pdf_catalog, "", jordan_docs)[[
-        "country", "regulator", "status", "coverage"
-    ]].copy()
-    st.dataframe(
-        markets,
-        hide_index=True,
-        width="stretch",
-        height=320,
-        column_config={
-            "country": "Country",
-            "regulator": "Regulator",
-            "status": "Corpus status",
-            "coverage": "Current coverage",
-        })
-
-    st.subheader("Central Bank of Jordan Regulations")
-    st.caption(
-        "Source: official Central Bank of Jordan regulations listing. "
-        "Run `python jordan_cbj_index.py` to refresh the local snapshot.")
-    st.link_button(
-        "Open CBJ regulations source",
-        "https://www.cbj.gov.jo/EN/List/Instructions_")
-
-    if jordan_docs.empty:
+    if docs.empty:
         st.info(
-            "No Jordan CBJ snapshot found yet. Run `python jordan_cbj_index.py` "
-            "from the project folder to create `jordan_cbj_regulations.csv`.")
+            f"No {country} {short} snapshot found yet. Run `python {script}` "
+            f"from the project folder to create `{csv_name}`.")
         return
 
-    jordan_query = st.text_input(
-        "Search Jordan regulations",
-        placeholder="capital, consumer protection, Basel, cyber",
-        key="jordan_cbj_query")
-    jordan_view = jordan_docs.copy()
-    if jordan_query.strip():
+    query = st.text_input(
+        f"Search {country} regulations",
+        placeholder=placeholder,
+        key=f"{short.lower()}_query")
+    view = docs.copy()
+    if query.strip():
         needles = [
             term.lower()
-            for term in re.split(r"[\s,]+", jordan_query.strip())
+            for term in re.split(r"[\s,]+", query.strip())
             if term.strip()
         ]
-        haystack = jordan_view[[
+        haystack = view[[
             "title", "category", "regulator", "file_type",
             "connection_status"
         ]].astype(str).agg(" ".join, axis=1).str.lower()
-        mask = pd.Series(True, index=jordan_view.index)
+        mask = pd.Series(True, index=view.index)
         for needle in needles:
             mask &= haystack.str.contains(re.escape(needle), na=False)
-        jordan_view = jordan_view[mask]
+        view = view[mask]
 
-    st.write(f"{len(jordan_view):,} Jordan records match.")
-    display = jordan_view[[
+    st.write(f"{len(view):,} {country} records match.")
+    display = view[[
         "title", "category", "size", "file_type", "last_seen", "url"
     ]].copy()
     st.dataframe(
@@ -1521,10 +1507,72 @@ def render_regional_map_section(catalog, directives):
                 "Official link", display_text="Open", width="medium"),
         })
     st.download_button(
-        "Download Jordan CBJ index (CSV)",
-        jordan_view.to_csv(index=False).encode("utf-8"),
-        "jordan_cbj_regulations.csv",
+        f"Download {country} {short} index (CSV)",
+        view.to_csv(index=False).encode("utf-8"),
+        csv_name,
         "text/csv")
+
+
+def render_regional_map_section(catalog, directives):
+    render_section_heading("Regional Banking Map")
+    pdf_catalog = get_pdf_catalog(catalog, directives)
+    jordan_docs = load_jordan_cbj_regulations(
+        file_mtime(JORDAN_CBJ_REGULATIONS))
+    turkey_docs = load_turkey_cbrt_regulations(
+        file_mtime(TURKEY_CBRT_REGULATIONS))
+    connected_feeds = int(not jordan_docs.empty) + int(not turkey_docs.empty)
+    pending_feeds = max(
+        0, len(REGIONAL_BANKING_MARKETS) - 1 - connected_feeds)
+
+    m1, m2, m3, m4, m5 = st.columns(5)
+    m1.metric("Mapped markets", f"{len(REGIONAL_BANKING_MARKETS):,}")
+    m2.metric("BOI PDFs", f"{len(pdf_catalog):,}")
+    m3.metric("Jordan CBJ records", f"{len(jordan_docs):,}")
+    m4.metric("Turkey CBRT records", f"{len(turkey_docs):,}")
+    m5.metric("Other feeds", f"{pending_feeds:,} pending")
+
+    st.caption(
+        "This layer is separated from the Reader. It is the workspace for "
+        "comparing Bank of Israel publications with regional banking "
+        "regulators as additional country corpora are connected.")
+    render_regional_banking_map(pdf_catalog, "", jordan_docs, turkey_docs)
+
+    markets = build_regional_map_data(
+        pdf_catalog, "", jordan_docs, turkey_docs)[[
+            "country", "regulator", "status", "coverage"
+        ]].copy()
+    st.dataframe(
+        markets,
+        hide_index=True,
+        width="stretch",
+        height=320,
+        column_config={
+            "country": "Country",
+            "regulator": "Regulator",
+            "status": "Corpus status",
+            "coverage": "Current coverage",
+        })
+
+    jordan_tab, turkey_tab = st.tabs(["Jordan (CBJ)", "Turkey (CBRT)"])
+    with jordan_tab:
+        render_regulator_table(
+            jordan_docs, "Jordan", "Central Bank of Jordan", "CBJ",
+            "https://www.cbj.gov.jo/EN/List/Instructions_",
+            "jordan_cbj_index.py", "jordan_cbj_regulations.csv",
+            "capital, consumer protection, Basel, cyber")
+    with turkey_tab:
+        st.caption(
+            "Note: most Turkish prudential banking rules (capital, "
+            "liquidity, credit risk) are issued by the BRSA (BDDK). The "
+            "CBRT covers monetary policy, payment systems and reserve "
+            "operations.")
+        render_regulator_table(
+            turkey_docs, "Turkey", "Central Bank of the Republic of Turkiye",
+            "CBRT",
+            "https://www.tcmb.gov.tr/wps/wcm/connect/EN/TCMB+EN/Main+Menu/"
+            "About+the+Bank/Legal+Framework/",
+            "turkey_cbrt_index.py", "turkey_cbrt_regulations.csv",
+            "payment, crypto, QR, liquidity")
 
 
 def render_reader_section(catalog, directives):
