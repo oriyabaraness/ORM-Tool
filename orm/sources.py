@@ -85,7 +85,9 @@ def _cbj_ref(title: str) -> str:
 
 
 def _is_pdf_url(url: str) -> bool:
-    low = url.lower()
+    low = url.lower().split("?", 1)[0]
+    if low.endswith((".docx", ".doc", ".xlsx", ".xls")):
+        return False
     return low.endswith(".pdf") or "root_storage" in low
 
 
@@ -101,10 +103,15 @@ def cbj_regulations(path: str = CBJ_REGULATIONS) -> Iterable[dict]:
         if not title:
             continue
         doc_id = f"JO-CBJ-{_slug(title)}"
+        url = _clean(row.get("url"))
         if doc_id in seen:
+            # Same instruction listed again (Word copy, annex): swap in a PDF
+            # link if the first listing didn't have one.
+            first = next(d for d in docs if d["id"] == doc_id)
+            if not first["pdf_url"] and _is_pdf_url(url):
+                first["pdf_url"] = url
             continue
         seen.add(doc_id)
-        url = _clean(row.get("url"))
         docs.append({
             "id": doc_id,
             "jurisdiction": "JO",

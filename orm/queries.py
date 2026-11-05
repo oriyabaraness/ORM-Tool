@@ -247,6 +247,21 @@ def clause(conn: sqlite3.Connection, provision_id: int) -> dict | None:
     return dict(row) if row else None
 
 
+def passages(conn: sqlite3.Connection, jurisdiction: str,
+             category_id: str) -> list[dict]:
+    """Every indexed clause of one country in one risk category."""
+    rows = conn.execute("""
+        SELECT p.id AS provision_id, p.ref, p.text, d.jurisdiction, d.regulator,
+               d.ref AS doc_ref, d.title AS doc_title, d.pdf_url, d.url
+        FROM provision_category pc
+        JOIN provision p ON p.id = pc.provision_id
+        JOIN document d ON d.id = p.document_id
+        WHERE pc.category_id = ? AND d.jurisdiction = ? AND pc.reviewed >= 0
+          AND length(trim(p.text)) > 40
+    """, (category_id, jurisdiction)).fetchall()
+    return [dict(r) for r in rows]
+
+
 def equivalents(conn: sqlite3.Connection, provision_id: int,
                 category_id: str) -> pd.DataFrame:
     """The clause's best matches in other countries, strongest first."""

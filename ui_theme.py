@@ -39,8 +39,27 @@ THEME_CSS = """
 html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
   background: var(--canvas); color: var(--ink);
 }
-[data-testid="stAppViewContainer"] *:not([class*="material"]):not(code):not(pre) {
+/* Inter everywhere except code and Material icon ligatures.
+   Streamlit draws icons as a span (data-testid="stIconMaterial") whose text
+   is the ligature name — compare_arrows, grid_view, schedule, and so on.
+   Those spans have no class containing "material", so a blanket font-family
+   turns the ligature into visible text and it paints over the nav label. */
+[data-testid="stAppViewContainer"] *:not([data-testid="stIconMaterial"]):not([class*="material"]):not(code):not(pre) {
   font-family: var(--ui);
+}
+[data-testid="stIconMaterial"] {
+  font-family: "Material Symbols Rounded" !important;
+  font-weight: 400 !important;
+  font-style: normal !important;
+  line-height: 1 !important;
+  letter-spacing: normal !important;
+  text-transform: none !important;
+  white-space: nowrap !important;
+  word-wrap: normal !important;
+  direction: ltr;
+  font-feature-settings: "liga" !important;
+  -webkit-font-feature-settings: "liga" !important;
+  overflow: hidden !important;
 }
 [data-testid="stHeader"] {background: transparent;}
 [data-testid="stMainBlockContainer"], .block-container {
@@ -65,12 +84,12 @@ code {font-size: 12.5px; background: var(--subtle); color: var(--ink); padding: 
   color: var(--ink-3) !important; font-weight: 600 !important;
 }
 [data-testid="stSidebarNavLink"] {border-radius: 6px; padding: 5px 10px;}
-[data-testid="stSidebarNavLink"] span {font-size: 14px; color: var(--ink-2);}
+[data-testid="stSidebarNavLink"] span:not([data-testid="stIconMaterial"]) {font-size: 14px; color: var(--ink-2);}
 [data-testid="stSidebarNavLink"]:hover {background: var(--subtle);}
 [data-testid="stSidebarNavLink"][aria-current="page"] {
   background: var(--subtle); box-shadow: inset 3px 0 0 var(--primary);
 }
-[data-testid="stSidebarNavLink"][aria-current="page"] span {color: var(--primary); font-weight: 600;}
+[data-testid="stSidebarNavLink"][aria-current="page"] span:not([data-testid="stIconMaterial"]) {color: var(--primary); font-weight: 600;}
 .app-brand {font-weight: 600; font-size: 15px; color: var(--ink); padding: 2px 10px 0;}
 .app-brand small {display: block; font-weight: 400; font-size: 12px; color: var(--ink-3);}
 .app-rail-foot {font-size: 12px; color: var(--ink-3); padding: 0 10px; line-height: 1.5;}

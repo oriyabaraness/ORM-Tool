@@ -229,7 +229,72 @@ def render_status(conn) -> None:
     st.markdown(f'<div class="ws-status">{"".join(parts)}</div>', unsafe_allow_html=True)
 
 
+def _directive_sort_key(row) -> tuple:
+    """Directive number first, then the title, so 87 comes before 206."""
+    ref = str(row.get("doc_ref") or "")
+    number = re.search(r"\d+", ref)
+    return (int(number.group()) if number else 10**9, ref, str(row.get("doc_title") or ""))
+
+
 # --- Compare: clause explorer ---------------------------------------------------
+
+def challenge_clause(home_text: str, candidates: list[dict], country_name: str,
+                     category_name: str) -> dict:
+    """Decide whether an unmatched clause is actually stated in the other country.
+
+    Looks past the saved shortlist and reads every clause in that country's
+    category. The answer names the requirement and, when it is found, the
+    clause that states it.
+    """
+    requirement = _short(re.sub(r"\s+", " ", home_text or "").strip(), 160)
+    if not candidates:
+        return {
+            "found": False,
+            "answer": (f"Not found in {country_name}. No indexed clauses in "
+                       f"{category_name} were available to check."),
+            "match": None,
+            "shared": [],
+        }
+    home_terms = list(dict.fromkeys(
+        t for t in match.tokens(home_text or "") if len(t) >= 4))
+    vectors = match.Vectorizer([home_text or ""] + [c["text"] for c in candidates]).vectors()
+    doc_freq: dict[str, int] = {}
+    token_sets = []
+    for cand in candidates:
+        toks = set(match.tokens(cand["text"]))
+        token_sets.append(toks)
+        for term in toks:
+            doc_freq[term] = doc_freq.get(term, 0) + 1
+    ceiling = max(1, int(0.25 * len(candidates)))
+    distinctive = [t for t in home_terms if doc_freq.get(t, 0) <= ceiling]
+    if len(distinctive) < 2:
+        distinctive = home_terms[:8]
+    best = None
+    for index, cand in enumerate(candidates):
+        shared = [t for t in distinctive if t in token_sets[index]]
+        cosine = match.cosine(vectors[0], vectors[index + 1])
+        coverage = len(shared) / len(distinctive) if distinctive else 0
+        score = 0.7 * cosine + 0.3 * coverage
+        if best is None or score > best[0]:
+            best = (score, cosine, shared, cand)
+    score, cosine, shared, cand = best
+    found = score >= 0.22 or (len(shared) >= 2 and cosine >= 0.12)
+    where = " ".join(part for part in (cand.get("doc_ref"), cand.get("doc_title"),
+                                       cand.get("ref")) if part)
+    if found:
+        answer = (f"Found in {country_name}. {where} states this requirement: "
+                  f"{requirement}")
+        if shared:
+            answer += f" Shared wording: {', '.join(shared[:6])}."
+    else:
+        answer = (f"Not found in {country_name}. The clause requires: {requirement} "
+                  f"Checked {_plural(len(candidates), 'clause')} in {category_name}.")
+        if shared:
+            answer += (f" The closest passage is {where}, and it does not state "
+                       "the same requirement.")
+    return {"found": found, "answer": answer, "match": cand if found else None,
+            "shared": shared}
+
 
 def render_clause_explorer(conn, country: str, category_id: str,
                            others: list[str] | None = None) -> None:
@@ -266,27 +331,33 @@ def render_clause_explorer(conn, country: str, category_id: str,
         if st.session_state.get(key) not in ids:
             st.session_state[key] = ids[0]
         selected_id = st.session_state[key]
+        filtering = bool(st.session_state.get("ws_clause_query", "").strip())
+        groups = [group for _doc_id, group in rows.groupby("document_id", sort=False)]
+        groups.sort(key=lambda group: _directive_sort_key(group.iloc[0]))
         with st.container(height=640, border=False):
-            for _doc_id, group in rows.groupby("document_id", sort=False):
+            for group in groups:
                 first = group.iloc[0]
-                st.markdown(f'<div class="ws-doc-group"><span class="ref">'
-                            f'{_e(first["doc_ref"])}</span>{_e(first["doc_title"])}</div>',
-                            unsafe_allow_html=True)
-                for _, c in group.iterrows():
-                    pid = int(c["provision_id"])
-                    n = int(c["matches"])
-                    if n:
-                        state = _plural(n, "equivalent")
-                    elif any(other_has_text.values()):
-                        state = "possible gap"
-                    else:
-                        state = "not assessed"
-                    label = f'{c["ref"] or "¶"}   {_short(c["text"], 90)}   ·  {state}'
-                    label = re.sub(r"[*_`\[\]#<>$~|]", "", label)
-                    if st.button(label, key=f"ws_clause_{pid}", width="stretch",
-                                 type="primary" if pid == selected_id else "secondary"):
-                        st.session_state[key] = pid
-                        st.rerun()
+                title = " ".join(
+                    part for part in (first["doc_ref"], first["doc_title"]) if part)
+                open_group = filtering or selected_id in set(group["provision_id"])
+                with st.expander(
+                        f"{title}  ·  {_plural(len(group), 'clause')}",
+                        expanded=open_group):
+                    for _, c in group.iterrows():
+                        pid = int(c["provision_id"])
+                        n = int(c["matches"])
+                        if n:
+                            state = _plural(n, "equivalent")
+                        elif any(other_has_text.values()):
+                            state = "possible gap"
+                        else:
+                            state = "not assessed"
+                        label = f'{c["ref"] or "¶"}   {_short(c["text"], 90)}   ·  {state}'
+                        label = re.sub(r"[*_`\[\]#<>$~|]", "", label)
+                        if st.button(label, key=f"ws_clause_{pid}", width="stretch",
+                                     type="primary" if pid == selected_id else "secondary"):
+                            st.session_state[key] = pid
+                            st.rerun()
 
     clause = queries.clause(conn, selected_id)
     with mid:
@@ -307,6 +378,7 @@ def render_clause_explorer(conn, country: str, category_id: str,
 
     with right:
         matches = queries.equivalents(conn, selected_id, category_id)
+        showed_match = False
         for j in others:
             mj = matches[matches["jurisdiction"] == j]
             st.markdown(pane_head(f"Equivalent in {NAMES[j]}", country=j,
@@ -321,7 +393,27 @@ def render_clause_explorer(conn, country: str, category_id: str,
                     msg = (f"<b>No comparable clause found in {NAMES[j]}.</b> "
                            "This may be a gap worth reviewing.")
                     st.markdown(notice(msg, "gap"), unsafe_allow_html=True)
+                    result_key = f"ws_challenge_{selected_id}_{j}"
+                    if st.button("Challenge", key=f"ws_challenge_btn_{selected_id}_{j}"):
+                        verdict = challenge_clause(
+                            clause["text"],
+                            queries.passages(conn, j, category_id),
+                            NAMES[j],
+                            taxonomy.BY_ID[category_id].name)
+                        st.session_state[result_key] = verdict
+                    verdict = st.session_state.get(result_key)
+                    if verdict:
+                        label, kind = (("Found", "found") if verdict["found"]
+                                       else ("Not found", "not-found"))
+                        body = (f'{pill(label, kind)}'
+                                f'<div class="ws-why">{_e(verdict["answer"])}</div>')
+                        if verdict["match"]:
+                            body += (_cite(verdict["match"])
+                                     + f'<div class="law">{_e(_short(verdict["match"]["text"], 320))}</div>')
+                        st.markdown(f'<div class="ws-match">{body}</div>',
+                                    unsafe_allow_html=True)
                 continue
+            showed_match = True
             cards = []
             for _, m in mj.iterrows():
                 strength = match.strength(m["score"])
@@ -337,8 +429,9 @@ def render_clause_explorer(conn, country: str, category_id: str,
                     f'{_cite(m)}<div class="law ws-scroll">{_highlight(m["text"], [])}</div>'
                     f'<div>{why}</div>{terms}</div>')
             st.markdown("".join(cards), unsafe_allow_html=True)
-        st.caption("Suggested matches, ranked by text similarity and shared checklist "
-                   "items within the same risk category. Confirm before relying on them.")
+        if showed_match:
+            st.caption("Suggested matches, ranked by text similarity and shared checklist "
+                       "items within the same risk category. Confirm before relying on them.")
 
 
 # --- Compare: full directive ----------------------------------------------------
@@ -510,11 +603,17 @@ def render_matrix(matrix, countries: list[str] | None = None) -> None:
                     f'{cells}</tr>')
     st.markdown(
         f'<table class="ws-table"><thead><tr><th>Risk category</th>{head}</tr></thead>'
-        f'<tbody>{"".join(body)}</tbody></table>'
+        f'<tbody>{"".join(body)}</tbody></table>',
+        unsafe_allow_html=True)
+
+
+def render_coverage_legend() -> None:
+    st.markdown(
         f'<div class="ws-legend"><span>{pill("Clauses indexed", "found")} text read and '
         f'tagged</span><span>{pill("Titles only", "partial")} mapped from document '
         f'titles, text not indexed yet</span><span>{pill("No coverage", "na")} no '
-        'document mapped</span></div>', unsafe_allow_html=True)
+        'document mapped</span></div>',
+        unsafe_allow_html=True)
 
 
 # --- Gaps -----------------------------------------------------------------------
@@ -662,7 +761,7 @@ def page_coverage(path: str | None = None) -> None:
                              key="coverage_core")
         st.session_state["scope_core"] = orm_only
         matrix = queries.coverage_matrix(conn, orm_only=orm_only)
-        render_matrix(matrix)
+        render_coverage_legend()
         c1, c2, c3, c4 = st.columns([1.3, 3, 1.2, 1.4], vertical_alignment="bottom")
         with c1:
             country = st.selectbox("Country", list(J), format_func=NAMES.get,
@@ -680,6 +779,7 @@ def page_coverage(path: str | None = None) -> None:
             st.download_button("Export matrix (CSV)",
                                matrix.to_csv(index=False).encode("utf-8"),
                                "risk_coverage_matrix.csv", "text/csv", width="stretch")
+        render_matrix(matrix)
 
 
 def page_gaps(path: str | None = None) -> None:

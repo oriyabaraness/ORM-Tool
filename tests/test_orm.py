@@ -243,6 +243,32 @@ def _fake_streamlit(rendered):
     return st
 
 
+def test_challenge_says_whether_jordan_has_the_clause():
+    import orm_compare
+    home = ("The bank shall notify the supervisor before using a cloud "
+            "service provider.")
+    jordan = [{
+        "text": "Banks shall notify the supervisor before using a cloud "
+                "service provider and keep a record.",
+        "doc_ref": "No. 9/2022", "doc_title": "Cloud Computing Guideline",
+        "ref": "Article 4", "regulator": "Central Bank of Jordan",
+    }, {
+        "text": "The liquidity coverage ratio shall be met with high quality assets.",
+        "doc_ref": "No. 5/2020", "doc_title": "Liquidity Coverage Ratio",
+        "ref": "Article 1", "regulator": "Central Bank of Jordan",
+    }]
+    found = orm_compare.challenge_clause(home, jordan, "Jordan", "Outsourcing")
+    assert found["found"]
+    assert "Found in Jordan" in found["answer"]
+    assert "Cloud Computing" in found["answer"]
+    missing = orm_compare.challenge_clause(
+        "The board shall approve a written exit strategy for every vendor.",
+        jordan[1:], "Jordan", "Outsourcing")
+    assert not missing["found"]
+    assert missing["answer"].startswith("Not found in Jordan")
+    assert "exit strategy" in missing["answer"].lower()
+
+
 def test_risk_compare_section_renders(built_db, monkeypatch):
     rendered: list[str] = []
     monkeypatch.setitem(sys.modules, "streamlit", _fake_streamlit(rendered))
