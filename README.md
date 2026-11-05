@@ -31,3 +31,21 @@ To add more PDFs to the searchable full-text corpus:
 ```bash
 python boi_pdf_text.py
 ```
+
+## Regional regulator feeds
+
+The Regional Banking Map tab compares the Bank of Israel corpus with other
+regulators. Each connected country has its own index script that writes a CSV
+snapshot next to `app.py`:
+
+| Country | Regulator | Refresh command | Snapshot file |
+|---|---|---|---|
+| Jordan | Central Bank of Jordan (CBJ) | `python jordan_cbj_index.py` | `jordan_cbj_regulations.csv` |
+| Turkey | Central Bank of the Republic of Türkiye (CBRT) | `python turkey_cbrt_index.py` | `turkey_cbrt_regulations.csv` |
+
+The Turkey script reads the CBRT "Legal Framework" pages and collects every
+English PDF (central bank law, payment systems regulations, operational
+transactions). If the site can't be reached it falls back to a built-in list
+of official documents. Most Turkish prudential banking rules (capital,
+liquidity, credit risk) come from the BRSA (BDDK) rather than the CBRT, so a
+BDDK feed would be the natural next step for Turkey.
