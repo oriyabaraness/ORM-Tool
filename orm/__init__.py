@@ -6,5 +6,6 @@ Modules:
     sources   -- one connector per regulator, all emitting the same Document shape
     extract   -- PDF text fetching/caching and provision splitting
     classify  -- category tagging and obligation-attribute extraction
+    review    -- ORM coordinator notes on a compared pair of clauses
     pipeline  -- orchestration (ingest -> extract -> classify)
 """

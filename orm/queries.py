@@ -240,7 +240,7 @@ def clause(conn: sqlite3.Connection, provision_id: int) -> dict | None:
     row = conn.execute("""
         SELECT p.id AS provision_id, p.ref, p.text, d.id AS document_id,
                d.ref AS doc_ref, d.title AS doc_title, d.jurisdiction,
-               d.regulator, d.pdf_url, d.url
+               d.regulator, d.published, d.pdf_url, d.url
         FROM provision p JOIN document d ON d.id = p.document_id
         WHERE p.id = ?
     """, (int(provision_id),)).fetchone()
@@ -269,7 +269,7 @@ def equivalents(conn: sqlite3.Connection, provision_id: int,
         SELECT m.match_id AS provision_id, m.score, m.text_similarity,
                m.shared_expectations, m.shared_terms,
                d.jurisdiction, d.regulator, d.ref AS doc_ref, d.title AS doc_title,
-               d.pdf_url, d.url, p.ref, p.text
+               d.published, d.pdf_url, d.url, p.ref, p.text
         FROM provision_match m
         JOIN provision p ON p.id = m.match_id
         JOIN document d ON d.id = p.document_id

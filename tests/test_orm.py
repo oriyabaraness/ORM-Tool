@@ -243,6 +243,103 @@ def _fake_streamlit(rendered):
     return st
 
 
+def test_coordinator_names_the_difference_between_two_clauses():
+    from orm.review import coordinator_notes
+    climate = coordinator_notes(
+        "Israel",
+        "Banking corporations should assess the impact of climate-related "
+        "risk drivers on their operations.",
+        "Jordan",
+        "Business Continuity Plan: the plan that ensures resumption of "
+        "operations after an interruption.")
+    text = " ".join(climate["points"])
+    assert climate["status"] == "differs"
+    assert "climate-related" in text
+    assert "Jordan does not state" in text
+    assert "Not established" in text
+    assert "compliance gap" in text
+
+    clock = coordinator_notes(
+        "Israel",
+        "The bank shall notify the supervisor within 24 hours of a cyber incident.",
+        "Jordan",
+        "Banks must notify the supervisor within 2 business days of a cyber incident.")
+    clock_text = " ".join(clock["points"])
+    assert "within 24 hours" in clock_text
+    assert "within 2 business days" in clock_text
+    assert "shorter time is within 24 hours" in clock_text
+    assert "does not, by itself, satisfy" in clock_text
+
+    extra = coordinator_notes(
+        "Israel",
+        "The bank shall notify the supervisor before using a cloud service provider.",
+        "Jordan",
+        "Banks shall notify the supervisor before using a cloud service provider "
+        "and keep a record.")
+    extra_text = " ".join(extra["points"])
+    assert "Both countries require" in extra_text
+    assert "keep a record" in extra_text
+
+    same = coordinator_notes(
+        "Israel",
+        "The bank shall notify the supervisor before using a cloud service provider.",
+        "Jordan",
+        "Banks shall notify the supervisor before using a cloud service provider.")
+    assert same["status"] == "aligned"
+    same_text = " ".join(same["points"])
+    assert "does not mean one control satisfies both" in same_text
+    assert "Not established" in same_text
+
+    gap = coordinator_notes(
+        "Israel",
+        "The board shall approve a written exit strategy for every vendor.",
+        "Jordan", None, assessed=True)
+    gap_text = " ".join(gap["points"])
+    assert gap["status"] == "unmatched"
+    assert "exit strategy" in gap_text.lower()
+    assert "not a compliance gap" in gap_text
+    assert "Not established" in gap_text
+
+    pending = coordinator_notes(
+        "Israel", "The board shall approve a written exit strategy.",
+        "Jordan", None, assessed=False)
+    pending_text = " ".join(pending["points"]).lower()
+    assert pending["status"] == "not_assessed"
+    assert "not assessed" in pending_text
+    assert "gap" not in pending_text
+
+
+def test_analyst_brief_does_not_invent_costs_or_legal_status():
+    from orm.review import analyst_brief
+    brief = analyst_brief(
+        "Israel",
+        "The bank shall notify the supervisor within 24 hours of a cyber incident.",
+        "Jordan",
+        "Banks must notify the supervisor within 2 business days of a cyber incident.",
+        home_regulator="Bank of Israel",
+        other_regulator="Central Bank of Jordan",
+        home_published="2019-11-01",
+        home_ref="Directive 361 §12",
+        other_ref="No. 1/2018 Article 6")
+    blob = " ".join(
+        item["text"] for item in brief["executive"]) + " " + " ".join(brief["risk"])
+    assert "Not established" in blob
+    assert "Implementation cost" in blob
+    assert "penalties" in blob.lower()
+    lowered = blob.lower()
+    assert "severity: high" not in lowered
+    assert "$" not in blob
+    by_topic = {row["topic"]: row for row in brief["matrix"]}
+    assert by_topic["Legal status"]["home"] == "Not established"
+    assert by_topic["Effective date"]["home"] == "Not established"
+    assert by_topic["Publication date"]["home"] == "2019-11-01"
+    assert by_topic["Page"]["home"] == "Not established"
+    assert "within 24 hours" in by_topic["Compliance deadline"]["home"]
+    assert brief["actions"]
+    assert all(row["priority"] == "Not established" for row in brief["actions"])
+    assert all(row["dependency"] == "Not established" for row in brief["actions"])
+
+
 def test_challenge_says_whether_jordan_has_the_clause():
     import orm_compare
     home = ("The bank shall notify the supervisor before using a cloud "

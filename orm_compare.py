@@ -15,7 +15,7 @@ import re
 import pandas as pd
 import streamlit as st
 
-from orm import classify, db, match, pipeline, queries, taxonomy
+from orm import classify, db, match, pipeline, queries, review, taxonomy
 from ui_theme import (COUNTRY_ACCENT, citation, e as _e, notice, page_header,
                       pane_head, pill)
 
@@ -62,6 +62,16 @@ CSS = """
 .ws-match .bar span {display: block; height: 3px; background: var(--primary); border-radius: 2px;}
 .ws-match .ws-scroll {max-height: 300px;}
 .ws-why {font-size: 12px; color: var(--ink-3); margin-top: 6px;}
+.ws-review {background: var(--surface); border: 1px solid var(--line); border-radius: 6px;
+  padding: 10px 12px 12px; margin: 0 0 10px;}
+.ws-review ul {margin: 8px 0 4px; padding-left: 18px;}
+.ws-review li {margin: 0 0 8px; color: var(--ink); font-size: 13px; line-height: 1.45;}
+.ws-review li:last-child {color: var(--ink-2);}
+.ws-brief {margin: 6px 0 22px; padding-top: 4px; border-top: 1px solid var(--line);}
+.ws-kicker {font-size: 12px; font-weight: 600; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--ink-2); margin: 14px 0 6px;}
+.ws-brief li {font-size: 13px; line-height: 1.45; margin: 0 0 6px; color: var(--ink);}
+.ws-brief .ws-table td:first-child {width: 22%; font-weight: 500;}
 .ws-table {width: 100%; border-collapse: collapse; font-size: 13px; background: var(--surface);
   border: 1px solid var(--line); border-radius: 6px; overflow: hidden;}
 .ws-table th {text-align: left; font-size: 12px; font-weight: 600; color: var(--ink-2);
@@ -296,16 +306,84 @@ def challenge_clause(home_text: str, candidates: list[dict], country_name: str,
             "shared": shared}
 
 
+_REVIEW_PILL = {
+    "differs": ("Differs", "partial"),
+    "aligned": ("Aligned", "found"),
+    "unmatched": ("No equivalent", "partial"),
+    "not_assessed": ("Not assessed", "not-assessed"),
+}
+
+
+def _brief_html(brief: dict, home_name: str, other_name: str) -> str:
+    """The six-part comparison under the clause panes."""
+    findings = "".join(f"<li>{_e(item['text'])}</li>" for item in brief["executive"])
+    matrix = "".join(
+        f"<tr><td>{_e(row['topic'])}</td><td>{_e(row['home'])}</td>"
+        f"<td>{_e(row['other'])}</td></tr>"
+        for row in brief["matrix"])
+    risk = "".join(f"<li>{_e(line)}</li>" for line in brief["risk"])
+
+    def bullets(items: list[str], empty: str) -> str:
+        if not items:
+            return f"<li>{_e(empty)}</li>"
+        return "".join(f"<li>{_e(item)}</li>" for item in items)
+
+    actions = "".join(
+        "<tr>"
+        f"<td>{_e(row['action'])}</td><td>{_e(row['owner'])}</td>"
+        f"<td>{_e(row['priority'])}</td><td>{_e(row['dependency'])}</td>"
+        "</tr>"
+        for row in brief["actions"])
+    chances = "".join(f"<li>{_e(line)}</li>" for line in brief["opportunities"])
+    return (
+        f'<div class="ws-brief">'
+        f'<div class="ws-kicker">Cross-border review · {_e(other_name)}</div>'
+        f'<p class="ws-why">Clause-level reading of the indexed text. '
+        f'Shall and must are explicit. Should and expected to are guidance. '
+        f'A difference here is not a compliance gap, and the stricter clause '
+        f'does not satisfy the other jurisdiction. Confirm before relying on it.</p>'
+        f'<div class="ws-kicker">1. Executive summary</div><ol>{findings}</ol>'
+        f'<div class="ws-kicker">2. Comparison</div>'
+        f'<table class="ws-table"><thead><tr><th>Topic</th>'
+        f'<th>{_e(home_name)}</th><th>{_e(other_name)}</th></tr></thead>'
+        f'<tbody>{matrix}</tbody></table>'
+        f'<div class="ws-kicker">3. Operational risk and controls</div><ul>{risk}</ul>'
+        f'<div class="ws-kicker">4. Shared and jurisdiction-specific</div>'
+        f'<p class="ws-why">Shared</p><ul>{bullets(brief["shared"], NE_SHARED)}</ul>'
+        f'<p class="ws-why">{_e(home_name)} only</p>'
+        f'<ul>{bullets(brief["home_only"], "None established in this pair.")}</ul>'
+        f'<p class="ws-why">{_e(other_name)} only</p>'
+        f'<ul>{bullets(brief["other_only"], "None established in this pair.")}</ul>'
+        f'<div class="ws-kicker">5. Actions for review</div>'
+        f'<table class="ws-table"><thead><tr><th>Action</th><th>Responsible</th>'
+        f'<th>Priority</th><th>Dependency</th></tr></thead><tbody>{actions}</tbody></table>'
+        f'<div class="ws-kicker">6. Where a shared approach can be examined</div>'
+        f'<ul>{chances}</ul></div>'
+    )
+
+
+NE_SHARED = "No shared obligation established in this pair."
+
+
+def _review_card(notes: dict, home_row, other_row=None) -> str:
+    label, kind = _REVIEW_PILL[notes["status"]]
+    items = "".join(f"<li>{_e(point)}</li>" for point in notes["points"])
+    cites = _cite(home_row)
+    if other_row is not None:
+        cites += _cite(other_row)
+    return f'<div class="ws-review">{pill(label, kind)}<ul>{items}</ul>{cites}</div>'
+
+
 def render_clause_explorer(conn, country: str, category_id: str,
                            others: list[str] | None = None) -> None:
-    """Three panes: clause list · selected clause · equivalents per country."""
+    """Four panes: clause list, the clause, equivalents, and an ORM review."""
     others = others or [j for j in J if j != country]
     rows = queries.clauses(conn, country, category_id,
                            query=st.session_state.get("ws_clause_query", ""))
     other_has_text = {j: queries.has_text_in_category(conn, j, category_id)
                       for j in others}
 
-    left, mid, right = st.columns([3, 3.6, 3.6], gap="medium")
+    left, mid, right, review_col = st.columns([2.3, 3.1, 3.2, 3.0], gap="medium")
     with left:
         st.markdown(pane_head(f"{NAMES[country]} clauses", country=country,
                               count=_plural(len(rows), "clause")),
@@ -432,6 +510,47 @@ def render_clause_explorer(conn, country: str, category_id: str,
         if showed_match:
             st.caption("Suggested matches, ranked by text similarity and shared checklist "
                        "items within the same risk category. Confirm before relying on them.")
+
+    briefs = []
+    with review_col:
+        st.markdown(pane_head("ORM review"), unsafe_allow_html=True)
+        st.caption("Clause-level differences. A difference is not a compliance gap, "
+                   "and the stricter clause does not satisfy the other jurisdiction.")
+        matches = queries.equivalents(conn, selected_id, category_id)
+        for j in others:
+            st.markdown(pane_head(NAMES[j], country=j), unsafe_allow_html=True)
+            mj = matches[matches["jurisdiction"] == j]
+            verdict = st.session_state.get(f"ws_challenge_{selected_id}_{j}")
+            other_row = None
+            other_text = None
+            assessed = other_has_text[j]
+            if not mj.empty:
+                other_row = mj.iloc[0]
+                other_text = other_row["text"]
+                assessed = True
+            elif verdict and verdict.get("found") and verdict.get("match"):
+                other_row = verdict["match"]
+                other_text = other_row["text"]
+                assessed = True
+            brief = review.analyst_brief(
+                NAMES[country], clause["text"], NAMES[j], other_text,
+                assessed=assessed,
+                home_regulator=_val(clause, "regulator"),
+                other_regulator=_val(other_row, "regulator") if other_row is not None else "",
+                home_published=_val(clause, "published"),
+                other_published=_val(other_row, "published") if other_row is not None else "",
+                home_ref=" ".join(p for p in (_val(clause, "doc_ref"), _val(clause, "ref")) if p),
+                other_ref=(" ".join(p for p in (_val(other_row, "doc_ref"),
+                                               _val(other_row, "ref")) if p)
+                           if other_row is not None else ""))
+            notes = {"status": brief["status"],
+                     "points": [item["text"] for item in brief["executive"]]}
+            st.markdown(_review_card(notes, clause, other_row), unsafe_allow_html=True)
+            if brief["status"] != "not_assessed":
+                briefs.append((NAMES[j], brief))
+    for other_name, brief in briefs:
+        st.markdown(_brief_html(brief, NAMES[country], other_name),
+                    unsafe_allow_html=True)
 
 
 # --- Compare: full directive ----------------------------------------------------
