@@ -1,6 +1,6 @@
-# banking-orm-tool
+# Clausewise
 
-Banking ORM tool: compares banking regulatory risk across countries (Israel, Jordan, Turkey), plus a Bank of Israel publications explorer.
+Clausewise (formerly the Banking ORM tool) compares banking regulatory risk across countries (Israel, Jordan, Turkey), plus a Bank of Israel publications explorer.
 
 The app opens on **Compare**. The left menu has the comparison workspace
 (Compare, Coverage, Gaps, Deadlines, Changes) and the reference screens

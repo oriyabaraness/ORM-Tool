@@ -1,5 +1,5 @@
 """
-Banking ORM Tool -- a Streamlit UI over the crawl/extract pipeline.
+Clausewise -- a Streamlit UI over the crawl/extract pipeline.
 
   Design direction: see DESIGN.md (regulatory risk comparison workspace).
 Run with:  streamlit run app.py   (from inside the .venv)
