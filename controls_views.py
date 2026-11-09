@@ -130,18 +130,18 @@ def page_obligations() -> None:
                     if c.category_id != scope["category"]]
         options.append(NEEDS_NEW)
         table = pd.DataFrame({
-            "status": view["status"],
-            "control": view["control_id"].fillna("").map(_control_label),
-            "actor": view["actor"].fillna(""),
-            "action": view["action"],
-            "deadline": view["deadline_text"].fillna(""),
-            "frequency": view["frequency"].fillna(""),
-            "evidence": view["evidence"].fillna(""),
-            "source": view["citation"],
-            "link": view["link"].fillna(""),
+            "status": view["status"].to_numpy(),
+            "control": view["control_id"].fillna("").map(_control_label).to_numpy(),
+            "actor": view["actor"].fillna("").to_numpy(),
+            "action": view["action"].to_numpy(),
+            "deadline": view["deadline_text"].fillna("").to_numpy(),
+            "frequency": view["frequency"].fillna("").to_numpy(),
+            "evidence": view["evidence"].fillna("").to_numpy(),
+            "source": view["citation"].to_numpy(),
+            "link": view["link"].fillna("").to_numpy(),
             "suggested": view["control_source"].map(
-                {"reviewer": "Reviewer", "suggested": "Suggested", "": ""}),
-        }, index=view["okey"])
+                {"reviewer": "Reviewer", "suggested": "Suggested", "": ""}).to_numpy(),
+        }, index=pd.Index(view["okey"].to_numpy(), name="okey"))
         edited = st.data_editor(
             table, key=f"obl_editor_{scope['country']}_{scope['category']}_{doc}",
             hide_index=True, width="stretch", height=560,

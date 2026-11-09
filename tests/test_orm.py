@@ -788,3 +788,22 @@ def test_controls_screens_render(built_db, tmp_path, monkeypatch):
     assert "needs a new control" in page.lower()
     assert "No controls saved yet" in page
     assert "Change log" in page
+
+
+def test_obligation_table_cells_are_filled(built_db, tmp_path, monkeypatch):
+    """Regression: the review table once rendered every cell as None because
+    its index did not line up with the data."""
+    tables = []
+    rendered: list[str] = []
+    fake = _fake_streamlit_full(rendered)
+    fake.data_editor = lambda df, **_: (tables.append(df), df)[1]
+    fake.session_state["scope_category"] = "op_resilience"
+    monkeypatch.setitem(sys.modules, "streamlit", fake)
+    monkeypatch.setenv("ORM_STATE_DB", str(tmp_path / "state.db"))
+    monkeypatch.setattr(db, "DEFAULT_DB", built_db)
+    for name in ("orm_compare", "ui_theme", "controls_views"):
+        sys.modules.pop(name, None)
+    importlib.import_module("controls_views").page_obligations()
+    table = tables[0]
+    assert not table["action"].isna().any() and not table["status"].isna().any()
+    assert table["action"].str.len().min() > 5
