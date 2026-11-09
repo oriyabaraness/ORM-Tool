@@ -44,10 +44,47 @@ STRENGTH_KIND = {"Strong match": "strong", "Partial match": "partial",
 
 CSS = """
 <style>
-.ws-land {max-width: 760px; margin: 4px 0 18px;}
-.ws-land ol {margin: 8px 0 0; padding-left: 18px;}
-.ws-land li {margin: 0 0 8px; font-size: 14px; line-height: 1.45; color: var(--ink);}
-.ws-land .areas {font-size: 12.5px; color: var(--ink-3); margin-top: 12px;}
+.land {max-width: 880px; margin: 56px auto 72px; position: relative; padding: 0 8px 28px;}
+.land-hero {display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 36px;
+  align-items: center; min-height: 240px;}
+.land h1 {font-family: var(--ui) !important; font-size: 40px; line-height: 1.12;
+  font-weight: 600; letter-spacing: -0.025em; color: var(--ink); margin: 0 0 22px;}
+.land-more {color: var(--primary); font-size: 14.5px; font-weight: 500;
+  text-decoration: none;}
+.land-more:hover {color: var(--primary-hover);}
+.land-card {background: var(--subtle); border-radius: 10px; min-height: 200px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; padding: 28px 22px; margin-top: 8px;}
+.land-brand {font-size: 28px; font-weight: 600; letter-spacing: -0.03em; color: var(--ink);}
+.land-countries {margin-top: 16px; display: flex; flex-direction: column; gap: 6px;
+  font-size: 13px; color: var(--ink-2);}
+.land-countries span {display: block;}
+.land-countries .dot {width: 7px; height: 7px; border-radius: 50%; display: inline-block;
+  margin-right: 6px; vertical-align: 1px;}
+.land-rule {position: relative; border-top: 1px solid var(--line); margin: 28px 0 32px;}
+.land-rule i {position: absolute; left: 50%; top: -2px; transform: translateX(-50%);
+  width: 84px; height: 3px; background: var(--primary); display: block;}
+.land-cols {display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;}
+.land-col {padding: 4px 22px 8px 20px; border-left: 1px dashed var(--line); min-height: 132px;}
+.land-col:first-child {border-left: none; padding-left: 4px;}
+.land-ico {width: 28px; height: 28px; margin-bottom: 14px; color: var(--primary);}
+.land-col h2 {font-family: var(--ui) !important; font-size: 15px; font-weight: 600;
+  color: var(--ink); margin: 0 0 6px;}
+.land-col p {font-size: 13.5px; line-height: 1.45; color: var(--ink-2); margin: 0 0 12px;}
+.land-foot {display: grid; grid-template-columns: 1fr 250px; align-items: start; margin-top: 6px;}
+.land-note {grid-column: 2; justify-self: end; width: 250px; margin-top: 4px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  padding: 14px 16px 12px; font-size: 13px; line-height: 1.45; color: var(--ink-2);}
+.land-note b {display: block; color: var(--ink); font-weight: 600; margin-bottom: 4px;}
+.land-areas {grid-column: 1 / -1; text-align: center; font-size: 12px; color: var(--ink-3);
+  margin: 22px 0 0;}
+@media (max-width: 800px) {
+  .land {margin-top: 16px;}
+  .land-hero, .land-cols {grid-template-columns: 1fr;}
+  .land-col {border-left: none; padding: 16px 0 0; border-top: 1px dashed var(--line);}
+  .land-foot {grid-template-columns: 1fr;}
+  .land-note {grid-column: 1; justify-self: stretch; width: auto; margin-top: 18px;}
+}
 .ws-status {display: flex; gap: 22px; flex-wrap: wrap; font-size: 12.5px;
   color: var(--ink-3); margin: -4px 0 12px; font-variant-numeric: tabular-nums;}
 .ws-status b {color: var(--ink-2); font-weight: 600;}
@@ -857,38 +894,65 @@ def render_changes(conn, countries: list[str]) -> None:
 
 # --- pages (registered in the left rail by app.py) --------------------------------
 
+_LAND_ICON = {
+    "compare": '<svg class="land-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M7 7h10M7 12h10M7 17h6"/></svg>',
+    "coverage": '<svg class="land-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="7" height="7"/><rect x="13" y="4" width="7" height="7"/><rect x="4" y="13" width="7" height="7"/><rect x="13" y="13" width="7" height="7"/></svg>',
+    "gaps": '<svg class="land-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M8 6h11M8 12h11M8 18h11"/><path d="M4 6h.01M4 12h.01M4 18h.01"/></svg>',
+}
+
+
+def _home_country_lines(conn) -> str:
+    status = queries.index_status(conn).set_index("jurisdiction")
+    lines = []
+    for j in J:
+        if j in status.index:
+            s = status.loc[j]
+            detail = (f'{int(s["documents"]):,} documents · '
+                      f'{int(s["provisions"]):,} clauses')
+        else:
+            detail = "no indexed text"
+        lines.append(
+            f'<span><i class="dot" style="background:{COUNTRY_ACCENT[j]}"></i>'
+            f'{_e(NAMES[j])} · {_e(detail)}</span>')
+    return "".join(lines)
+
+
 def page_home(path: str | None = None) -> None:
-    """The front door: what the tool does, what is indexed, and where to start."""
-    page_header(APP_NAME,
-                "One regulatory clause in one country, and how the other covered "
-                "countries handle the same obligation. Every line cites its source.")
+    """Front door, centered: a headline, the covered countries, and three ways in."""
     with _open(path) as conn:
-        render_status(conn)
-    core = [c.name for c in taxonomy.CATEGORIES if c.orm_core]
+        countries = _home_country_lines(conn)
+    core = " · ".join(c.name for c in taxonomy.CATEGORIES if c.orm_core)
+    columns = (
+        ("compare", "Compare", "Open a clause. The equivalent clauses appear beside it.",
+         "Open Compare"),
+        ("coverage", "Coverage", "How much of each risk area is indexed in each country.",
+         "See coverage"),
+        ("gaps", "Gaps", "Baseline expectations marked found, not found, or not assessed.",
+         "Review gaps"),
+    )
+    cols = "".join(
+        f'<div class="land-col">{_LAND_ICON[key]}'
+        f'<h2>{_e(title)}</h2><p>{_e(body)}</p>'
+        f'<a class="land-more" href="/{key}">{_e(link)} ›</a></div>'
+        for key, title, body, link in columns)
     st.markdown(
-        '<div class="ws-land"><ol>'
-        "<li><b>Choose</b> a country, the countries to set beside it, and a risk category.</li>"
-        "<li><b>Open a clause.</b> The equivalent clauses appear beside it.</li>"
-        "<li><b>Read the review.</b> It names what each side requires. "
-        "A difference in the text is not a compliance gap, and a stricter clause "
-        "does not satisfy the other jurisdiction. Confirm it before you rely on it.</li>"
-        "</ol>"
-        f'<div class="areas">ORM core: {_e(" · ".join(core))}</div>'
-        "</div>",
+        f'<div class="land">'
+        f'<div class="land-hero">'
+        f'<div><h1>Read one clause beside the same obligation in every covered country.</h1>'
+        f'<a class="land-more" href="/compare">Open Compare ›</a></div>'
+        f'<div class="land-card"><div class="land-brand">{_e(APP_NAME)}</div>'
+        f'<div class="land-countries">{countries}</div></div>'
+        f'</div>'
+        f'<div class="land-rule"><i></i></div>'
+        f'<div class="land-cols">{cols}</div>'
+        f'<div class="land-foot">'
+        f'<div class="land-note"><b>Before you rely on a match</b>'
+        f'A difference in the text is not a compliance gap. '
+        f'A country with no indexed text is not assessed.</div>'
+        f'<div class="land-areas">{_e(core)}</div>'
+        f'</div>'
+        f'</div>',
         unsafe_allow_html=True)
-    doors = [
-        ("compare", "Open Compare", True),
-        ("coverage", "Coverage", False),
-        ("gaps", "Gaps", False),
-        ("deadlines", "Deadlines", False),
-    ]
-    for col, (key, label, primary) in zip(st.columns(len(doors), gap="small"), doors):
-        with col:
-            if st.button(label, key=f"home_{key}", type="primary" if primary else "secondary",
-                         width="stretch") and PAGES.get(key):
-                st.switch_page(PAGES[key])
-    st.caption("Sources and market context are in the left rail. "
-               "A country with no indexed text is not assessed, not a gap.")
 
 
 def page_compare(path: str | None = None) -> None:
