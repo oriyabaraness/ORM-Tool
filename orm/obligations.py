@@ -304,6 +304,8 @@ def map_controls(conn: sqlite3.Connection, top_n: int = 2) -> int:
         for c in lib:
             score, hits = score_control(c, text, ov, cvecs[c.id])
             if c.category_id not in tags:
+                if len(hits) < 2:     # another area's control needs clear evidence
+                    continue
                 score *= OTHER_CATEGORY_WEIGHT
             if score >= MIN_CONTROL_SCORE:
                 scored.append((score, c, hits))

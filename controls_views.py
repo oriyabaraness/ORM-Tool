@@ -296,9 +296,9 @@ def _render_chain(conn, reviews) -> None:
         ctl_html = (f'<b>{_e(ctl.id)} · {_e(ctl.name)}</b><br>'
                     f'<span class="muted">{_e(ctl.frequency)}</span>'
                     if ctl else '<span class="pill gap">needs a new control</span>')
-        state_pill = {"Approved": '<span class="pill found">approved</span>',
-                      "Unreviewed": '<span class="pill na">suggested</span>'}.get(
-            r["status"], "")
+        state_pill = ('<span class="pill found">approved</span>'
+                      if r["status"] == "Approved" else
+                      '<span class="pill na">suggested</span>' if ctl else "")
         who = f"<b>{_e(r['actor'])}</b>: " if r["actor"] else ""
         timing = " · ".join(x for x in (r["deadline_text"], r["frequency"]) if x)
         blocks.append(
