@@ -559,3 +559,48 @@ def test_workspace_pages_render_honest_states(built_db, monkeypatch):
     assert '<h1 class="page-title">Changes</h1>' in page
     # fixture documents are older than the default 90-day window: honest empty state
     assert "No documents in this scope were published or updated since" in page
+
+
+# --- deployment guards ---------------------------------------------------------
+# The live site once ran with an empty index: the deploy built orm.db without
+# downloading any regulation text, and the extracted texts were git-ignored.
+
+def test_deploy_build_downloads_regulation_text():
+    import json
+    with open(os.path.join(ROOT, "railway.json")) as f:
+        cfg = json.load(f)
+    build_cmd = cfg.get("build", {}).get("buildCommand", "")
+    assert "orm_pipeline.py build" in build_cmd and "--fetch" in build_cmd
+
+
+def test_extracted_texts_are_not_git_ignored():
+    with open(os.path.join(ROOT, ".gitignore")) as f:
+        rules = [line.strip() for line in f
+                 if line.strip() and not line.startswith("#")]
+    assert not any(r.startswith("orm_texts") for r in rules)
+
+
+def test_blocked_host_is_skipped_after_repeated_failures(tmp_path, monkeypatch):
+    import requests
+    calls = []
+
+    def fake_get(url, **kwargs):
+        calls.append(url)
+        raise requests.ConnectionError("blocked")
+
+    monkeypatch.setattr(extract, "TEXT_DIR", str(tmp_path / "texts"))
+    monkeypatch.setattr(extract, "MANUAL_DIR", str(tmp_path / "manual"))
+    monkeypatch.setattr(extract, "BOI_TEXT_DIR", str(tmp_path / "boi"))
+    monkeypatch.setattr(extract.requests, "get", fake_get)
+    with db.session(str(tmp_path / "orm.db")) as conn:
+        db.init(conn)
+        for n in range(6):
+            db.upsert_document(conn, {
+                "id": f"XX-{n}", "jurisdiction": "JO", "regulator": "Test",
+                "ref": "", "title": f"Doc {n}", "subject": "",
+                "url": "", "pdf_url": f"https://blocked.example/{n}.pdf",
+                "published": "", "lastmod": "", "source": "test"})
+        counts = pipeline.extract_texts(conn, fetch=True)
+    assert len(calls) == pipeline.MAX_HOST_FAILURES
+    assert counts["error"] == pipeline.MAX_HOST_FAILURES
+    assert counts["no_text"] == 6 - pipeline.MAX_HOST_FAILURES

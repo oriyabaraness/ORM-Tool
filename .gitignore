@@ -8,10 +8,10 @@ __pycache__/
 boi_texts/*.txt.gz
 .streamlit/
 
-# Risk Compare index (rebuilt from the CSV indexes)
+# Risk Compare index (rebuilt from the CSV indexes and orm_texts/)
+# orm_texts/ IS committed: it is the extracted regulation text the live
+# site needs. Railway also downloads missing texts at build time.
 orm.db
-orm_texts/*.txt.gz
-orm_texts/manual/
 
 # Automatic updates (./update.sh)
 update_reports/

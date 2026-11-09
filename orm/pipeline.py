@@ -2,13 +2,19 @@
 from __future__ import annotations
 
 import datetime as dt
+import os
 import sqlite3
 from typing import Callable
+from urllib.parse import urlparse
+
+import requests
 
 from . import classify as clf
 from . import db, extract, match, sources
 
 Log = Callable[[str], None]
+
+MAX_HOST_FAILURES = 3
 
 
 def _noop(_msg: str) -> None:
@@ -51,11 +57,17 @@ def extract_texts(conn: sqlite3.Connection, *, fetch: bool = True,
         rows = rows[:limit]
 
     counts = {"ok": 0, "no_text": 0, "error": 0}
+    # A regulator site that keeps failing (blocked, down) is skipped for the
+    # rest of the run, so one bad host can't stall a deploy for an hour.
+    host_failures: dict[str, int] = {}
+    timeout = int(os.environ.get("ORM_FETCH_TIMEOUT", "60"))
     for i, row in enumerate(rows, 1):
         doc_id = row["id"]
+        host = urlparse(row["pdf_url"] or "").netloc
+        host_ok = host_failures.get(host, 0) < MAX_HOST_FAILURES
         try:
             text, pages, path, origin = extract.get_text(
-                doc_id, row["pdf_url"], fetch=fetch)
+                doc_id, row["pdf_url"], fetch=fetch and host_ok, timeout=timeout)
             provisions = extract.split_provisions(text)
             db.replace_provisions(conn, doc_id, provisions)
             conn.execute(
@@ -72,6 +84,11 @@ def extract_texts(conn: sqlite3.Connection, *, fetch: bool = True,
             conn.execute("UPDATE document SET text_status='error', error=? "
                          "WHERE id=?", (f"{type(exc).__name__}: {exc}"[:300], doc_id))
             counts["error"] += 1
+            if isinstance(exc, requests.RequestException) and host:
+                host_failures[host] = host_failures.get(host, 0) + 1
+                if host_failures[host] == MAX_HOST_FAILURES:
+                    log(f"skipping further downloads from {host} "
+                        f"after {MAX_HOST_FAILURES} failures")
             log(f"[{i}/{len(rows)}] {doc_id}: ERROR {exc}")
         conn.commit()
     log(f"extract: {counts}")

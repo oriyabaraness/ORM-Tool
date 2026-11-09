@@ -168,6 +168,13 @@ def ensure_index(path: str) -> None:
     if needs_build:
         with st.spinner("Building the comparison index…"):
             pipeline.build(path, fetch=False)
+    with db.session(path) as conn:
+        provisions = conn.execute("SELECT COUNT(*) FROM provision").fetchone()[0]
+    if provisions == 0:
+        st.warning("No regulation text is loaded yet, so clauses, matches, gaps "
+                   "and deadlines will be empty. Run "
+                   "`python orm_pipeline.py build --fetch` (the Railway build "
+                   "does this automatically).")
 
 
 def _open(path: str | None):

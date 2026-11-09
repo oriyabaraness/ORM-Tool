@@ -5,7 +5,7 @@ services:
     name: orm-tool
     runtime: python
     plan: free
-    buildCommand: pip install -r requirements.txt
+    buildCommand: pip install -r requirements.txt && ORM_FETCH_TIMEOUT=20 python orm_pipeline.py build --fetch
     startCommand: streamlit run app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true --browser.gatherUsageStats false
     envVars:
       - key: PYTHON_VERSION

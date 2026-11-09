@@ -78,8 +78,14 @@ It shows:
   not assessed per country, with the evidencing provision.
 - **Deadlines** – every "within N hours/days" obligation, normalized to hours.
 
-The index lives in `orm.db` (SQLite, git-ignored). The app builds it from the
-CSV indexes on first open. To pull the regulation text:
+The index lives in `orm.db` (SQLite, git-ignored). On Railway, the build step
+(`railway.json`) downloads the regulation PDFs and builds the index, so the
+live site always has clause text. A regulator site that fails 3 times in a run
+is skipped for the rest of that run. Extracted texts in `orm_texts/` are
+committed, including manual drop-ins, so they ship with every deploy.
+
+Locally, the app builds the index from the CSV indexes on first open. To pull
+the regulation text:
 
 ```bash
 python orm_pipeline.py build --fetch          # download + extract PDFs, tag everything
