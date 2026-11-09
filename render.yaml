@@ -1,0 +1,12 @@
+# Render deployment for the ORM Tool (Streamlit app).
+# Render reads this file when you create a "Blueprint" from this repo.
+services:
+  - type: web
+    name: orm-tool
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: streamlit run app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true --browser.gatherUsageStats false
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.8"
