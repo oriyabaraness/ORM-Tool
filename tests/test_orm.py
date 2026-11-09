@@ -340,6 +340,21 @@ def test_analyst_brief_does_not_invent_costs_or_legal_status():
     assert all(row["dependency"] == "Not established" for row in brief["actions"])
 
 
+def test_landing_page_states_the_way_in(built_db, monkeypatch):
+    rendered: list[str] = []
+    monkeypatch.setitem(sys.modules, "streamlit", _fake_streamlit(rendered))
+    sys.modules.pop("orm_compare", None)
+    sys.modules.pop("ui_theme", None)
+    orm_compare = importlib.import_module("orm_compare")
+    orm_compare.page_home(built_db)
+    page = "\n".join(rendered)
+    assert "Clausewiz" in page
+    assert "Open a clause" in page
+    assert "not a compliance gap" in page
+    assert "Governance" in page
+    assert "Israel" in page
+
+
 def test_challenge_says_whether_jordan_has_the_clause():
     import orm_compare
     home = ("The bank shall notify the supervisor before using a cloud "

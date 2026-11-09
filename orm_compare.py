@@ -16,8 +16,8 @@ import pandas as pd
 import streamlit as st
 
 from orm import classify, db, match, pipeline, queries, review, taxonomy
-from ui_theme import (COUNTRY_ACCENT, citation, e as _e, notice, page_header,
-                      pane_head, pill)
+from ui_theme import (APP_NAME, COUNTRY_ACCENT, citation, e as _e, notice,
+                      page_header, pane_head, pill)
 
 J = queries.JURISDICTIONS
 NAMES = queries.JURISDICTION_NAMES
@@ -44,6 +44,10 @@ STRENGTH_KIND = {"Strong match": "strong", "Partial match": "partial",
 
 CSS = """
 <style>
+.ws-land {max-width: 760px; margin: 4px 0 18px;}
+.ws-land ol {margin: 8px 0 0; padding-left: 18px;}
+.ws-land li {margin: 0 0 8px; font-size: 14px; line-height: 1.45; color: var(--ink);}
+.ws-land .areas {font-size: 12.5px; color: var(--ink-3); margin-top: 12px;}
 .ws-status {display: flex; gap: 22px; flex-wrap: wrap; font-size: 12.5px;
   color: var(--ink-3); margin: -4px 0 12px; font-variant-numeric: tabular-nums;}
 .ws-status b {color: var(--ink-2); font-weight: 600;}
@@ -236,6 +240,10 @@ def render_status(conn) -> None:
                 f'<b>{NAMES[j]}</b> · {_plural(int(s["documents"]), "document")} · '
                 f'{int(s["with_text"] or 0):,} with text · '
                 f'{_plural(int(s["provisions"]), "clause")}</span>')
+        else:
+            parts.append(
+                f'<span><span class="dot" style="background:{COUNTRY_ACCENT[j]}"></span>'
+                f'<b>{NAMES[j]}</b> · no indexed text</span>')
     st.markdown(f'<div class="ws-status">{"".join(parts)}</div>', unsafe_allow_html=True)
 
 
@@ -848,6 +856,40 @@ def render_changes(conn, countries: list[str]) -> None:
 
 
 # --- pages (registered in the left rail by app.py) --------------------------------
+
+def page_home(path: str | None = None) -> None:
+    """The front door: what the tool does, what is indexed, and where to start."""
+    page_header(APP_NAME,
+                "One regulatory clause in one country, and how the other covered "
+                "countries handle the same obligation. Every line cites its source.")
+    with _open(path) as conn:
+        render_status(conn)
+    core = [c.name for c in taxonomy.CATEGORIES if c.orm_core]
+    st.markdown(
+        '<div class="ws-land"><ol>'
+        "<li><b>Choose</b> a country, the countries to set beside it, and a risk category.</li>"
+        "<li><b>Open a clause.</b> The equivalent clauses appear beside it.</li>"
+        "<li><b>Read the review.</b> It names what each side requires. "
+        "A difference in the text is not a compliance gap, and a stricter clause "
+        "does not satisfy the other jurisdiction. Confirm it before you rely on it.</li>"
+        "</ol>"
+        f'<div class="areas">ORM core: {_e(" · ".join(core))}</div>'
+        "</div>",
+        unsafe_allow_html=True)
+    doors = [
+        ("compare", "Open Compare", True),
+        ("coverage", "Coverage", False),
+        ("gaps", "Gaps", False),
+        ("deadlines", "Deadlines", False),
+    ]
+    for col, (key, label, primary) in zip(st.columns(len(doors), gap="small"), doors):
+        with col:
+            if st.button(label, key=f"home_{key}", type="primary" if primary else "secondary",
+                         width="stretch") and PAGES.get(key):
+                st.switch_page(PAGES[key])
+    st.caption("Sources and market context are in the left rail. "
+               "A country with no indexed text is not assessed, not a gap.")
+
 
 def page_compare(path: str | None = None) -> None:
     page_header("Compare", "Pick a clause; its equivalents in the other countries "

@@ -4448,9 +4448,10 @@ def page_market():
 apply_theme()
 
 PAGES = {
+    "home": st.Page(orm_compare.page_home, title="Home",
+                    icon=":material/home:", url_path="home", default=True),
     "compare": st.Page(orm_compare.page_compare, title="Compare",
-                       icon=":material/compare_arrows:", url_path="compare",
-                       default=True),
+                       icon=":material/compare_arrows:", url_path="compare"),
     "coverage": st.Page(orm_compare.page_coverage, title="Coverage",
                         icon=":material/grid_view:", url_path="coverage"),
     "gaps": st.Page(orm_compare.page_gaps, title="Gaps",
@@ -4467,12 +4468,12 @@ PAGES = {
 orm_compare.PAGES = PAGES
 
 nav = st.navigation({
-    APP_NAME: [PAGES["compare"], PAGES["coverage"], PAGES["gaps"],
+    APP_NAME: [PAGES["home"], PAGES["compare"], PAGES["coverage"], PAGES["gaps"],
                PAGES["deadlines"], PAGES["changes"]],
     "Reference": [PAGES["sources"], PAGES["market"]],
 }, position="sidebar")
 st.sidebar.markdown(
-    '<div class="app-rail-foot">Israel · Jordan<br>'
-    'Bank of Israel and Central Bank of Jordan regulation, mapped to one risk '
-    'taxonomy.</div>', unsafe_allow_html=True)
+    '<div class="app-rail-foot">Israel · Jordan · Turkey<br>'
+    'One risk taxonomy. Every comparison cites the clause it came from.</div>',
+    unsafe_allow_html=True)
 nav.run()

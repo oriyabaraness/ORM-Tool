@@ -11,7 +11,7 @@ import html
 import streamlit as st
 
 # One place for the product name (DESIGN.md: "renaming later is one change").
-APP_NAME = "Banking ORM Tool"
+APP_NAME = "Clausewiz"
 
 # Country accents: thin rules and small dots only, never fills.
 COUNTRY_ACCENT = {"IL": "#006d7e", "JO": "#9b2f4a", "TR": "#8a6a1f",
