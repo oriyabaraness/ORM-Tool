@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 import requests
 
 from . import classify as clf
-from . import db, extract, match, sources
+from . import db, extract, match, obligations, sources
 
 Log = Callable[[str], None]
 
@@ -135,11 +135,12 @@ def classify_all(conn: sqlite3.Connection, log: Log = _noop) -> dict[str, int]:
                 (p["jurisdiction"], cat, eid, p["id"], evidence))
             n_exp += 1
     n_match = match.compute_matches(conn)
+    obl = obligations.build_all(conn)
     db.set_meta(conn, "classified_at", dt.datetime.now().isoformat(timespec="seconds"))
     conn.commit()
     stats = {"documents": len(doc_cats), "tagged_provisions": n_prov,
              "attributes": n_attr, "expectation_hits": n_exp,
-             "clause_matches": n_match}
+             "clause_matches": n_match, **obl}
     log(f"classify: {stats}")
     return stats
 

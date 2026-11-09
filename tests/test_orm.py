@@ -4,11 +4,13 @@ Text fixtures below are short synthetic passages written for the tests; they
 are not quotations of any regulator's text.
 """
 import contextlib
+import io
 import importlib
 import os
 import sys
 import types
 
+import pandas as pd
 import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -604,3 +606,185 @@ def test_blocked_host_is_skipped_after_repeated_failures(tmp_path, monkeypatch):
     assert len(calls) == pipeline.MAX_HOST_FAILURES
     assert counts["error"] == pipeline.MAX_HOST_FAILURES
     assert counts["no_text"] == 6 - pipeline.MAX_HOST_FAILURES
+
+
+# --- obligations, controls and audit readiness ---------------------------------
+
+def test_obligation_extraction_reads_duties_not_definitions():
+    from orm import obligations
+    text = ("1. In this directive, \"incident\" shall mean any disruption. "
+            "2. The board of directors shall approve the business continuity plan "
+            "at least once a year. 3. A banking corporation shall notify the "
+            "Supervisor of Banks within 24 hours of a significant incident. "
+            "4. The plan should be tested annually. This directive shall enter "
+            "into force on 1 January.")
+    found = obligations.extract(text)
+    actions = [o["action"].lower() for o in found]
+    assert not any("mean" in a for a in actions)
+    assert not any("force" in a for a in actions)
+    board = next(o for o in found if o["actor"] == "the board")
+    assert "approve" in board["action"].lower()
+    assert board["frequency"] == "at least once a year"
+    assert "minutes" in board["evidence"].lower()
+    notify = next(o for o in found if "notify" in o["action"].lower())
+    assert notify["deadline_hours"] == 24.0 and notify["modality"] == "mandatory"
+    tested = next(o for o in found if "tested" in o["action"].lower())
+    assert tested["modality"] == "expected" and tested["actor"] == "The plan"
+    assert obligations.okey("IL-1", "A b.") == obligations.okey("IL-1", "a  B")
+
+
+def test_build_creates_obligations_with_control_suggestions(built_db):
+    from orm import controls
+    with db.session(built_db) as conn:
+        rows = conn.execute("SELECT * FROM obligation").fetchall()
+        assert rows, "the build should extract obligations"
+        assert {r["jurisdiction"] for r in rows} == {"IL", "JO"}
+        sugg = conn.execute(
+            "SELECT o.action, oc.control_id FROM obligation_control oc "
+            "JOIN obligation o ON o.id = oc.obligation_id").fetchall()
+    assert all(s["control_id"] in controls.BY_ID for s in sugg)
+    notify = [s["control_id"] for s in sugg if "notify" in s["action"].lower()]
+    assert "INC-02" in notify or "RES-05" in notify or notify
+
+
+def test_control_library_is_complete():
+    from orm import controls
+    core = [c.id for c in taxonomy.CATEGORIES if c.orm_core]
+    for cid in core:
+        assert len(controls.for_category(cid)) >= 4, cid
+    assert len({c.id for c in controls.LIBRARY}) == len(controls.LIBRARY)
+
+
+def test_reviews_survive_and_replay_as_of_a_date(tmp_path):
+    from orm import state
+    path = str(tmp_path / "state.db")
+    with state.session(path) as s:
+        state.save_review(s, "k1", status=1, reviewer="Dana", control_id="RES-01",
+                          at="2026-03-01T10:00:00+00:00")
+        state.save_review(s, "k1", status=1, reviewer="Dana", control_id="RES-01",
+                          at="2026-03-02T10:00:00+00:00")       # no change: not logged
+        state.save_review(s, "k1", status=-1, reviewer="Omar", note="not a duty",
+                          at="2026-04-01T10:00:00+00:00")
+        assert len(state.log_entries(s)) == 2
+        assert state.reviews(s)["k1"]["status"] == -1
+        assert state.reviews_as_of(s, "2026-02-28") == {}
+        assert state.reviews_as_of(s, "2026-03-15")["k1"]["status"] == 1
+        assert state.reviews_as_of(s, "2026-04-01")["k1"]["reviewer"] == "Omar"
+
+
+def test_bank_control_upload_is_normalised():
+    from orm import state
+    df = pd.DataFrame([
+        {"Control ID": "C-1", "Control Name": "BCP test", "Owner": "Ops",
+         "Frequency": "Annual", "Risk category": "Operational risk & resilience"},
+        {"Control ID": "C-2", "Control Name": "Weird", "Owner": "",
+         "Frequency": "", "Risk category": "Astrology"},
+    ])
+    rows, problems = state.normalize_controls(df)
+    assert rows[0]["category_id"] == "op_resilience" and rows[0]["ref"] == "C-1"
+    assert rows[1]["category_id"] == "" and any("Astrology" in p for p in problems)
+    assert state.normalize_controls(pd.DataFrame([{"x": 1}]))[0] == []
+
+
+def test_coverage_and_audit_pack(built_db, tmp_path):
+    from orm import audit, state
+    bank = [{"ref": "C-9", "name": "Incident notification",
+             "description": "Notify the Supervisor of Banks of significant "
+                            "operational incidents within 24 hours",
+             "owner": "CRO", "frequency": "Per incident", "category_id": ""}]
+    with db.session(built_db) as conn, state.session(str(tmp_path / "s.db")) as s:
+        df = audit.obligation_table(conn, {}, jurisdiction="IL")
+        k = df[df["action"].str.contains("notify", case=False)].iloc[0]["okey"]
+        state.save_review(s, k, status=1, reviewer="Dana", control_id="INC-02")
+        df = audit.obligation_table(conn, state.reviews(s), jurisdiction="IL")
+        row = df[df["okey"] == k].iloc[0]
+        assert row["status"] == "Approved" and row["control_id"] == "INC-02"
+        assert row["citation"].startswith("Bank of Israel · Directive 999")
+        cov = audit.coverage(df, bank)
+        assert cov[cov["okey"] == k].iloc[0]["coverage"] in ("covered", "partial")
+        assert "not covered" in set(cov["coverage"])
+        xlsx = audit.audit_pack_excel(cov, scope="Israel", log=state.log_entries(s))
+        sheets = pd.read_excel(io.BytesIO(xlsx), sheet_name=None)
+        assert {"Read me", "Coverage summary", "Obligations", "Change log"} <= set(sheets)
+        assert "Directive 999" in " ".join(sheets["Obligations"]["Source"])
+        pdf = audit.audit_pack_pdf(cov, scope="Israel")
+        assert pdf.startswith(b"%PDF-1.4") and pdf.rstrip().endswith(b"%%EOF")
+        assert b"Clausewiz audit pack" in pdf
+
+
+def test_update_report_names_controls_to_recheck(built_db):
+    from orm import update
+    with db.session(built_db) as conn:
+        affected = update.affected_controls(conn, ["IL-TEST-1"], reviews={})
+    assert affected[0]["obligations"] > 0 and affected[0]["controls"]
+    report = update.Report(started="2026-11-09T10:00:00", affected=affected)
+    assert "Controls to re-check: 1 document(s)" in report.to_text()
+
+
+def test_llm_results_must_quote_the_clause():
+    from orm import llm
+    texts = {3: "The bank shall notify the supervisor within 24 hours."}
+    items = [{"seq": 3, "sentence": "The bank shall notify the supervisor within 24 hours.",
+              "action": "Notify the supervisor"},
+             {"seq": 3, "sentence": "The bank shall pay every customer a bonus.",
+              "action": "Pay a bonus"},
+             {"seq": 7, "sentence": "The bank shall notify the supervisor within 24 hours.",
+              "action": "Wrong clause"}]
+    kept = llm.verify(items, texts)
+    assert [k["action"] for k in kept] == ["Notify the supervisor"]
+
+
+def test_llm_cache_replaces_rule_extraction(built_db, tmp_path, monkeypatch):
+    import json as _json
+    from orm import obligations
+    monkeypatch.setattr(obligations, "LLM_CACHE_DIR", str(tmp_path / "llm"))
+    with db.session(built_db) as conn:
+        seq = conn.execute("SELECT seq, text FROM provision WHERE document_id='IL-TEST-1' "
+                           "AND text LIKE '%notify%'").fetchone()
+        os.makedirs(obligations.LLM_CACHE_DIR)
+        with open(obligations.llm_cache_path("IL-TEST-1"), "w") as f:
+            _json.dump({"obligations": [{"seq": seq["seq"], "actor": "the bank",
+                                         "action": "Notify the supervisor",
+                                         "sentence": "notify the Supervisor of Banks",
+                                         "modality": "mandatory"}]}, f)
+        obligations.build_all(conn)
+        rows = conn.execute("SELECT method, action FROM obligation "
+                            "WHERE document_id='IL-TEST-1'").fetchall()
+    assert [(r["method"], r["action"]) for r in rows] == [("llm", "Notify the supervisor")]
+
+
+def _fake_streamlit_full(rendered):
+    """The shared fake plus the widgets the controls screens use."""
+    st = _fake_streamlit(rendered)
+    st.data_editor = lambda df, **_: (rendered.append(df.to_string()), df)[1]
+    st.file_uploader = lambda *a, **k: None
+    st.segmented_control = lambda label, options, default=None, **_: default
+    st.success = st.error = st.warning = lambda body, **_: rendered.append(body)
+    st.text_input = lambda label, value="", **_: value
+    st.selectbox = lambda label, options, index=0, **_: list(options)[index or 0]
+
+    class _Cols:
+        def __getattr__(self, name):
+            return lambda *a, **k: None
+    st.column_config = _Cols()
+    return st
+
+
+def test_controls_screens_render(built_db, tmp_path, monkeypatch):
+    rendered: list[str] = []
+    monkeypatch.setitem(sys.modules, "streamlit", _fake_streamlit_full(rendered))
+    monkeypatch.setenv("ORM_STATE_DB", str(tmp_path / "state.db"))
+    monkeypatch.setattr(db, "DEFAULT_DB", built_db)
+    for name in ("orm_compare", "ui_theme", "controls_views"):
+        sys.modules.pop(name, None)
+    views = importlib.import_module("controls_views")
+    views.page_obligations()
+    views.page_controls()
+    views.page_audit()
+    page = "\n".join(str(x) for x in rendered)
+    for title in ("Obligations", "Controls", "Audit readiness"):
+        assert f'<h1 class="page-title">{title}</h1>' in page
+    assert "obligations" in page and "approved" in page
+    assert "needs a new control" in page.lower()
+    assert "No controls saved yet" in page
+    assert "Change log" in page

@@ -57,7 +57,10 @@ Primary navigation (left rail on desktop, in this order):
 | **Deadlines** | Every extracted reporting deadline and review frequency, normalized and comparable. |
 | **Changes** | New and amended regulations since a date (future; drives alerts). |
 | **Sources** | The document library: catalog, PDF reader, search. Secondary, for when users need the original. |
-| **Market context** | Macro indicators (FX reserves, rates, banking-sector indicators). Secondary. |
+| **Obligations** | Every duty as a checklist item (who, what, deadline, frequency, evidence, source). Approve, correct, reject; pick the control. |
+| **Controls** | Control library with obligations answered per country; regulation → control → evidence chain per directive. |
+| **Audit readiness** | Upload the bank's controls, coverage, audit pack (Excel/PDF), history as of any date. |
+| ~~Market context~~ | Switched off (macro data is not part of the controls workflow); code kept in `reference_views.py`. |
 
 Global top bar, visible on every screen:
 `[Country ▾]  [Compare with: Jordan ✕ + Add]  [Risk category ▾]  [Search clauses…]`

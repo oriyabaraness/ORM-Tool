@@ -8,6 +8,10 @@ Usage:
   python orm_pipeline.py classify         # re-tag only (after taxonomy edits)
   python orm_pipeline.py status
   python orm_pipeline.py update           # re-crawl regulators, rebuild, report changes
+  python orm_pipeline.py obligations      # rebuild obligations + control suggestions
+  ANTHROPIC_API_KEY=... python orm_pipeline.py obligations --llm --document IL-BOI-PC-310
+                                          # have Claude read one directive (cached
+                                          # in orm_texts/llm/, commit it to deploy)
 
 Jordan: most CBJ entries have no direct PDF link in the index. Either run
 `python jordan_cbj_index.py` first (it tries to scrape PDF links), or save a
@@ -16,7 +20,7 @@ lists the ids.
 """
 import argparse
 
-from orm import db, pipeline, update
+from orm import db, obligations, pipeline, update
 
 
 def cmd_status(args):
@@ -60,6 +64,13 @@ def main():
     sub.add_parser("update", help="re-crawl every regulator, rebuild, report "
                                   "what is new (writes update_reports/latest.txt)")
 
+    o = sub.add_parser("obligations", help="rebuild obligations and control "
+                                           "suggestions (optionally read by Claude)")
+    o.add_argument("--llm", action="store_true",
+                   help="have Claude read --document (needs ANTHROPIC_API_KEY)")
+    o.add_argument("--document", action="append", default=[],
+                   help="document id, e.g. IL-BOI-PC-310 (repeatable)")
+
     args = ap.parse_args()
     if args.cmd == "build":
         pipeline.build(args.db, fetch=args.fetch,
@@ -69,6 +80,18 @@ def main():
         with db.session(args.db) as conn:
             db.init(conn)
             pipeline.classify_all(conn, log=print)
+    elif args.cmd == "obligations":
+        with db.session(args.db) as conn:
+            db.init(conn)
+            if args.llm:
+                from orm import llm
+                if not args.document:
+                    ap.error("--llm needs at least one --document")
+                for doc_id in args.document:
+                    n = llm.read_document(conn, doc_id, log=print)
+                    print(f"{doc_id}: {n} obligations saved to "
+                          f"{obligations.llm_cache_path(doc_id)}")
+            print(f"obligations: {obligations.build_all(conn)}")
     elif args.cmd == "update":
         report = update.update(args.db, log=print)
         print("\n" + report.to_text())

@@ -12,6 +12,8 @@ boi_texts/*.txt.gz
 # orm_texts/ IS committed: it is the extracted regulation text the live
 # site needs. Railway also downloads missing texts at build time.
 orm.db
+# Reviews, uploaded controls and the audit log (human work; see orm/state.py)
+orm_state.db
 
 # Automatic updates (./update.sh)
 update_reports/

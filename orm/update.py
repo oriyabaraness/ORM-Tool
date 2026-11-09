@@ -73,6 +73,9 @@ class Report:
     changed: list[dict] = field(default_factory=list)
     newly_read: list[dict] = field(default_factory=list)
     failed: list[dict] = field(default_factory=list)
+    # per changed or newly read document: its obligations and the controls
+    # they map to, so the owner of each control knows to re-check it
+    affected: list[dict] = field(default_factory=list)
 
     def to_text(self) -> str:
         def docs(rows, extra=""):
@@ -95,6 +98,13 @@ class Report:
                   *docs(self.newly_read)]
         lines += ["", f"Could not be read: {len(self.failed)}",
                   *docs(self.failed, "error")]
+        lines += ["", f"Controls to re-check: {len(self.affected)} document(s)"]
+        if not self.affected:
+            lines.append("  (none)")
+        for a in self.affected:
+            ctl = "; ".join(a["controls"]) or "no control mapped yet"
+            lines.append(f"  - [{a['jurisdiction']}] {a['label']}: "
+                         f"{a['obligations']} obligation(s) → {ctl}")
         return "\n".join(lines) + "\n"
 
 
@@ -165,6 +175,43 @@ def compare(before: dict[str, dict], after: dict[str, dict], report: Report) -> 
             report.failed.append(d)
 
 
+def affected_controls(conn, document_ids: list[str],
+                      reviews: dict[str, dict] | None = None) -> list[dict]:
+    """For each document: how many obligations it carries and which controls
+    they map to (a reviewer's choice wins over the suggestion)."""
+    from . import controls as control_lib
+    from . import obligations, state
+    obligations.init(conn)
+    if reviews is None:
+        with state.session() as s:
+            reviews = state.reviews(s)
+    out = []
+    for doc_id in dict.fromkeys(document_ids):
+        doc = conn.execute("SELECT jurisdiction, ref, title FROM document WHERE id=?",
+                           (doc_id,)).fetchone()
+        if not doc:
+            continue
+        rows = conn.execute("""
+            SELECT o.okey, (SELECT control_id FROM obligation_control oc
+                             WHERE oc.obligation_id = o.id
+                             ORDER BY score DESC LIMIT 1) AS top
+            FROM obligation o WHERE o.document_id = ?""", (doc_id,)).fetchall()
+        ids = []
+        for r in rows:
+            rv = reviews.get(r["okey"])
+            if rv and rv["status"] == -1:
+                continue
+            chosen = rv["control_id"] if rv and rv.get("control_id") else r["top"]
+            if chosen:
+                ids.append(chosen)
+        names = [control_lib.BY_ID[c].name for c in dict.fromkeys(ids)
+                 if c in control_lib.BY_ID]
+        label = f"{doc['ref'] + ' · ' if doc['ref'] else ''}{doc['title']}"
+        out.append({"document_id": doc_id, "jurisdiction": doc["jurisdiction"],
+                    "label": label, "obligations": len(rows), "controls": names})
+    return out
+
+
 def update(path: str | None = None, *, steps: list[Step] | None = None,
            root: str = HERE, report_dir: str = REPORT_DIR,
            log: Log = print) -> Report:
@@ -181,6 +228,8 @@ def update(path: str | None = None, *, steps: list[Step] | None = None,
 
     with db.session(path) as conn:
         compare(before, _snapshot(conn), report)
+        report.affected = affected_controls(
+            conn, [d["id"] for d in report.changed + report.newly_read])
     report.finished = dt.datetime.now().isoformat(timespec="seconds")
 
     os.makedirs(report_dir, exist_ok=True)

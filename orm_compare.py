@@ -36,7 +36,7 @@ LEVEL = {
 }
 STATUS = {
     "found": ("Found", "found"),
-    "not found": ("Not found", "not-found"),
+    "not found": ("Not found in indexed text", "not-found"),
     "not assessed": ("Not assessed", "not-assessed"),
 }
 STRENGTH_KIND = {"Strong match": "strong", "Partial match": "partial",
@@ -312,7 +312,7 @@ def challenge_clause(home_text: str, candidates: list[dict], country_name: str,
     if not candidates:
         return {
             "found": False,
-            "answer": (f"Not found in {country_name}. No indexed clauses in "
+            "answer": (f"Not found in {country_name}'s indexed text. No indexed clauses in "
                        f"{category_name} were available to check."),
             "match": None,
             "shared": [],
@@ -349,7 +349,7 @@ def challenge_clause(home_text: str, candidates: list[dict], country_name: str,
         if shared:
             answer += f" Shared wording: {', '.join(shared[:6])}."
     else:
-        answer = (f"Not found in {country_name}. The clause requires: {requirement} "
+        answer = (f"Not found in {country_name}'s indexed text. The clause requires: {requirement} "
                   f"Checked {_plural(len(candidates), 'clause')} in {category_name}.")
         if shared:
             answer += (f" The closest passage is {where}, and it does not state "
@@ -814,13 +814,30 @@ def render_gap_table(conn, category_id: str, countries: list[str] | None = None)
     st.markdown(
         f'<table class="ws-table"><thead><tr><th>Baseline expectation</th>{head}</tr>'
         f'</thead><tbody>{"".join(rows)}</tbody></table>', unsafe_allow_html=True)
-    st.caption("Detected from the full text of each country's documents. “Not assessed” "
-               "means no text is indexed yet for that country in this category, which "
-               "is not the same as a gap. Treat every result as a lead for review.")
+    st.caption("Detected by keyword patterns in each country's indexed text. "
+               "“Not found in indexed text” means the patterns did not match: the "
+               "requirement may still exist in wording the patterns miss, or in a "
+               "document that is not indexed. “Not assessed” means no text is indexed "
+               "for that country in this category. Neither is a confirmed gap: treat "
+               "every result as a lead for review.")
+    render_text_coverage(conn, countries)
     export = table.copy()
     export.insert(0, "category", cat.name)
     st.download_button("Export gaps (CSV)", export.to_csv(index=False).encode("utf-8"),
                        f"gaps_{category_id}.csv", "text/csv", key="ws_gaps_export")
+
+
+def render_text_coverage(conn, countries: list[str]) -> None:
+    """How many of each country's documents have text, so a reader can weigh
+    every “not found” against what was actually read."""
+    rows = conn.execute(
+        "SELECT jurisdiction j, COUNT(*) total, "
+        "SUM(text_status = 'ok') with_text FROM document GROUP BY jurisdiction"
+    ).fetchall()
+    parts = [f"{NAMES[r['j']]}: {r['with_text'] or 0} of {r['total']} documents read"
+             for r in rows if r["j"] in countries]
+    if parts:
+        st.caption("Text coverage — " + " · ".join(parts) + ".")
 
 
 # --- Deadlines ------------------------------------------------------------------
@@ -897,6 +914,26 @@ def render_changes(conn, countries: list[str]) -> None:
                        "text": "Text",
                        "link": st.column_config.LinkColumn("Source",
                                                            display_text="Open ↗")})
+
+    from orm import update as _update
+    affected = [a for a in _update.affected_controls(conn, df["document_id"].tolist())
+                if a["obligations"]]
+    st.markdown("**Controls to re-check.** Changed regulations, their obligations, "
+                "and the controls those obligations map to.")
+    if not affected:
+        st.markdown(notice("None of the changed documents carries an indexed "
+                           "obligation yet."), unsafe_allow_html=True)
+        return
+    st.dataframe(
+        pd.DataFrame([{"country": NAMES[a["jurisdiction"]], "document": a["label"],
+                       "obligations": a["obligations"],
+                       "controls": "; ".join(a["controls"]) or "none mapped yet"}
+                      for a in affected]),
+        hide_index=True, width="stretch",
+        column_config={"country": "Country", "document": "Document",
+                       "obligations": "Obligations",
+                       "controls": st.column_config.TextColumn("Controls to re-check",
+                                                               width="large")})
 
 
 # --- pages (registered in the left rail by app.py) --------------------------------

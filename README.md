@@ -2,10 +2,48 @@
 
 Banking ORM tool: compares banking regulatory risk across countries (Israel, Jordan, Turkey), plus a Bank of Israel publications explorer.
 
-The app opens on **Compare**. The left menu has the comparison workspace
-(Compare, Coverage, Gaps, Deadlines, Changes) and the reference screens
-(Sources: catalog and PDF reader; Market context: regional map and macro
-data). Design rules are in `DESIGN.md`; shared styles in `ui_theme.py`.
+The left menu has three groups:
+
+- **Compare**: Home, Compare, Coverage, Gaps, Deadlines, Changes
+  (`orm_compare.py`)
+- **Controls**: Obligations, Controls, Audit readiness (`controls_views.py`)
+- **Reference**: Sources, the catalog and PDF reader (`reference_views.py`)
+
+The Market context screen (macro data) is switched off but its code is kept in
+`reference_views.py`. `app.py` only wires screens together. Design rules are in
+`DESIGN.md`; shared styles in `ui_theme.py`.
+
+## Obligations, controls and audit readiness
+
+Every clause is read for sentences that impose a duty (shall, must, should).
+Each becomes an **obligation**: who must do what, by when, how often, the
+evidence to keep, and the exact source sentence (`orm/obligations.py`). Each
+obligation gets a suggested control from a starter library of 42 operational
+risk controls (`orm/controls.py`).
+
+- **Obligations** screen: approve, correct or reject each obligation and pick
+  its control. Every decision is recorded with the reviewer's name.
+- **Controls** screen: the library with how many obligations each control
+  answers per country, and the regulation → control → evidence chain for any
+  directive.
+- **Audit readiness** screen: upload the bank's own controls (Excel/CSV, a
+  template is provided), see which obligations they cover, export an audit
+  pack (Excel and PDF) with citations and reviews, and see what was approved
+  as of any date.
+
+Human work (reviews, uploaded controls, the change log) is kept in
+`orm_state.db` (`orm/state.py`), separate from the rebuildable index. Set
+`ORM_STATE_DB` to a path on a Railway volume to keep it across deploys.
+
+Optional, more accurate extraction by Claude, one directive at a time:
+
+```bash
+ANTHROPIC_API_KEY=... python orm_pipeline.py obligations --llm --document IL-BOI-PC-310
+```
+
+The result is cached in `orm_texts/llm/` (commit it); builds use it in place
+of the pattern-based extraction for that document. Every obligation Claude
+returns must quote a sentence that is really in the clause, or it is dropped.
 
 ## Run locally
 
@@ -113,7 +151,8 @@ matches in those categories until a BDDK feed is added.
 1. re-crawls the Bank of Israel page list and Proper Conduct directives
 2. re-reads the Central Bank of Jordan and Central Bank of Turkey regulations lists
 3. downloads and reads any new PDFs, then re-tags and re-matches clauses
-4. writes a short "what's new" report to `update_reports/latest.txt`
+4. writes a short "what's new" report to `update_reports/latest.txt`,
+   including the controls each changed regulation maps to
 
 If a regulator's site blocks the crawler, its previous list is kept, so a bad
 run never removes documents. The full log is in `update_reports/update.log`.
