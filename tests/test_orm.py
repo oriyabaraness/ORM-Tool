@@ -407,6 +407,9 @@ def test_compare_picks_a_directive_and_lists_its_clauses(built_db):
     with db.session(built_db) as conn:
         docs = queries.directives(conn, "IL", "op_resilience")
         assert "IL-TEST-1" in set(docs["document_id"])
+        assert set(docs["document_id"]) <= {
+            r[0] for r in conn.execute("SELECT document_id FROM document_category "
+                                       "WHERE category_id = 'op_resilience'")}
         clauses = queries.directive_clauses(conn, "IL-TEST-1")
         assert len(clauses) == len(queries.document_provisions(conn, "IL-TEST-1"))
         bcp = clauses[clauses["text"].str.contains("business continuity plan")].iloc[0]

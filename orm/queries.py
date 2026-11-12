@@ -292,20 +292,17 @@ def has_text_in_category(conn: sqlite3.Connection, jurisdiction: str,
 
 
 def directives(conn: sqlite3.Connection, jurisdiction: str,
-               category_id: str | None = None) -> pd.DataFrame:
-    """Directives of one country that have tagged clauses, in that category
-    when one is given."""
+               category_id: str) -> pd.DataFrame:
+    """Directives of one country filed under one risk category (from their
+    title and the regulator's subject), with indexed clauses."""
     df = _df(conn, """
         SELECT d.id AS document_id, d.ref AS doc_ref, d.title AS doc_title,
-               (SELECT COUNT(*) FROM provision p WHERE p.document_id = d.id) AS clauses,
-               (SELECT COUNT(DISTINCT pc.provision_id) FROM provision_category pc
-                 JOIN provision p ON p.id = pc.provision_id
-                 WHERE p.document_id = d.id AND pc.reviewed >= 0
-                   AND (? IS NULL OR pc.category_id = ?)) AS tagged
-        FROM document d
-        WHERE d.jurisdiction = ? AND d.text_status = 'ok'
-    """, (category_id, category_id, jurisdiction))
-    return df[(df["clauses"] > 0) & (df["tagged"] > 0)].reset_index(drop=True)
+               (SELECT COUNT(*) FROM provision p WHERE p.document_id = d.id) AS clauses
+        FROM document_category dc
+        JOIN document d ON d.id = dc.document_id
+        WHERE dc.category_id = ? AND d.jurisdiction = ? AND d.text_status = 'ok'
+    """, (category_id, jurisdiction))
+    return df[df["clauses"] > 0].reset_index(drop=True)
 
 
 def directive_clauses(conn: sqlite3.Connection, document_id: str,

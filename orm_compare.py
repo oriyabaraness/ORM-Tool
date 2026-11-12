@@ -72,6 +72,11 @@ a.lib-card em {margin-top: auto; font-style: normal; font-size: 12px; color: #88
 .ws-status .dot {width: 7px; height: 7px; border-radius: 50%; display: inline-block;
   margin-right: 6px; vertical-align: 1px;}
 .ws-cat-desc {font-size: 12.5px; color: var(--ink-3); margin: -2px 0 12px;}
+.ws-area {display: flex; flex-direction: column; gap: 2px; font-size: 12.5px;
+  line-height: 1.3; padding-bottom: 4px;}
+.ws-area span {color: var(--ink-3);}
+.ws-area b {color: var(--ink); font-weight: 600;}
+.ws-area a {font-size: 12px; text-decoration: none;}
 .ws-doc-group {font-size: 12px; color: var(--ink-2); margin: 12px 0 4px; font-weight: 600;}
 .ws-doc-group .ref {color: var(--primary); margin-right: 6px;}
 .ws-selected {background: var(--surface); border: 1px solid var(--line);
@@ -248,8 +253,6 @@ def _take_library_query() -> None:
         st.session_state["compare_country"] = country
     if category in taxonomy.BY_ID:
         st.session_state["scope_category"] = category
-        st.session_state["scope_only_category"] = True
-        st.session_state["compare_only_category"] = True
     if hasattr(getattr(st, "query_params", None), "clear"):
         st.query_params.clear()
 
@@ -259,31 +262,32 @@ def _directive_bar(conn, page: str, country: str, cols) -> tuple[str, str | None
     ids = [c.id for c in taxonomy.CATEGORIES]
     category_id = _remembered("category", ids, ids[0])
     name = taxonomy.BY_ID[category_id].name
-    toggle_key = f"{page}_only_category"
-    if toggle_key not in st.session_state:
-        st.session_state[toggle_key] = st.session_state.get("scope_only_category", True)
     with cols[-1]:
-        only = st.toggle("Only this risk area", key=toggle_key)
-    st.session_state["scope_only_category"] = only
-    docs = queries.directives(conn, country, category_id if only else None)
+        st.markdown(
+            f'<div class="ws-area"><span>Risk area</span><b>{_e(name)}</b>'
+            f'<a href="/" target="_self">Change on Home</a></div>',
+            unsafe_allow_html=True)
+    docs = queries.directives(conn, country, category_id)
+    label = f"{name} directives"
     if docs.empty:
         with cols[-2]:
-            st.selectbox("Directive", ["—"], disabled=True, key=f"{page}_directive_none")
+            st.selectbox(label, ["None in the index"], disabled=True,
+                         key=f"{page}_directive_none")
         return category_id, None
     docs = docs.assign(_key=docs.apply(_directive_sort_key, axis=1)).sort_values("_key")
     labels = {r["document_id"]: (f"{r['doc_ref'] + ' · ' if r['doc_ref'] else ''}"
                                  f"{r['doc_title']}  ·  {int(r['clauses'])} clauses")
               for _, r in docs.iterrows()}
     options = list(labels)
-    key = f"{page}_directive_{country}"
+    key = f"{page}_directive_{country}_{category_id}"
     if st.session_state.get(key) not in options:
         st.session_state[key] = options[0]
     with cols[-2]:
-        document_id = st.selectbox("Directive", options, format_func=labels.get, key=key)
-    scope = (f"{len(options)} directives with <b>{_e(name)}</b> clauses. "
-             "Turn off “Only this risk area” to list every directive."
-             if only else f"All {len(options)} {_e(NAMES[country])} directives with tagged clauses.")
-    st.markdown(f'<div class="ws-cat-desc">{scope}</div>', unsafe_allow_html=True)
+        document_id = st.selectbox(label, options, format_func=labels.get, key=key)
+    st.markdown(
+        f'<div class="ws-cat-desc">Choosing from the {_plural(len(options), "directive")} '
+        f'{_e(NAMES[country])} files under <b>{_e(name)}</b>.</div>',
+        unsafe_allow_html=True)
     return category_id, document_id
 
 
@@ -507,10 +511,11 @@ def render_clause_explorer(conn, country: str, document_id: str | None,
     """Four panes: the directive's clauses, the clause, equivalents, and an ORM review."""
     others = others or [j for j in J if j != country]
     if not document_id:
+        name = taxonomy.BY_ID[home_category].name
         st.markdown(notice(
-            f"{NAMES[country]} has no directive with indexed, tagged clauses here yet."
-            " Turn off “Only this risk area”, or run "
-            "<code>python orm_pipeline.py build --fetch</code>."),
+            f"<b>Not assessed.</b> The index has no {_e(NAMES[country])} directive filed "
+            f"under {_e(name)} with indexed text. Choose another country or "
+            '<a href="/" target="_self">another risk area on Home</a>.'),
             unsafe_allow_html=True)
         return
     rows = queries.directive_clauses(conn, document_id,
