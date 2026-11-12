@@ -389,6 +389,8 @@ def test_risk_compare_section_renders(built_db, monkeypatch):
     sys.modules.pop("orm_compare", None)
     sys.modules.pop("ui_theme", None)
     orm_compare = importlib.import_module("orm_compare")
+    # Arrive the way Home sends you: the Operational risk card.
+    sys.modules["streamlit"].session_state["scope_category"] = "op_resilience"
     orm_compare.render_risk_compare_section(built_db)
     page = "\n".join(rendered)
     assert "Operational risk &amp; resilience" in page
@@ -399,6 +401,20 @@ def test_risk_compare_section_renders(built_db, monkeypatch):
     assert "Equivalent in Jordan" in page
     assert "Bank of Israel · <b>Directive 999" in page   # citation line
     assert "Article 1" in page
+
+
+def test_compare_picks_a_directive_and_lists_its_clauses(built_db):
+    with db.session(built_db) as conn:
+        docs = queries.directives(conn, "IL", "op_resilience")
+        assert "IL-TEST-1" in set(docs["document_id"])
+        clauses = queries.directive_clauses(conn, "IL-TEST-1")
+        assert len(clauses) == len(queries.document_provisions(conn, "IL-TEST-1"))
+        bcp = clauses[clauses["text"].str.contains("business continuity plan")].iloc[0]
+        assert "op_resilience" in bcp["categories"]
+        assert bcp["matches"] > 0
+        eq = queries.equivalents(conn, int(bcp["provision_id"]))
+        assert eq.iloc[0]["ref"] == "Article 1"
+        assert not eq["provision_id"].duplicated().any()
 
 
 def test_clause_matching_pairs_equivalent_clauses(built_db):

@@ -248,18 +248,52 @@ def _take_library_query() -> None:
         st.session_state["compare_country"] = country
     if category in taxonomy.BY_ID:
         st.session_state["scope_category"] = category
-        st.session_state["compare_category"] = category
-        if not taxonomy.BY_ID[category].orm_core:
-            st.session_state["scope_core"] = False
-            st.session_state["compare_core"] = False
+        st.session_state["scope_only_category"] = True
+        st.session_state["compare_only_category"] = True
     if hasattr(getattr(st, "query_params", None), "clear"):
         st.query_params.clear()
 
 
-def scope_bar(conn, page: str, *, compare: bool = True, category: bool = True) -> dict:
-    """Country · Compare with · Risk category, shared by every workspace page."""
+def _directive_bar(conn, page: str, country: str, cols) -> tuple[str, str | None]:
+    """Directive picker for Compare. The risk area chosen on Home narrows the list."""
+    ids = [c.id for c in taxonomy.CATEGORIES]
+    category_id = _remembered("category", ids, ids[0])
+    name = taxonomy.BY_ID[category_id].name
+    toggle_key = f"{page}_only_category"
+    if toggle_key not in st.session_state:
+        st.session_state[toggle_key] = st.session_state.get("scope_only_category", True)
+    with cols[-1]:
+        only = st.toggle("Only this risk area", key=toggle_key)
+    st.session_state["scope_only_category"] = only
+    docs = queries.directives(conn, country, category_id if only else None)
+    if docs.empty:
+        with cols[-2]:
+            st.selectbox("Directive", ["—"], disabled=True, key=f"{page}_directive_none")
+        return category_id, None
+    docs = docs.assign(_key=docs.apply(_directive_sort_key, axis=1)).sort_values("_key")
+    labels = {r["document_id"]: (f"{r['doc_ref'] + ' · ' if r['doc_ref'] else ''}"
+                                 f"{r['doc_title']}  ·  {int(r['clauses'])} clauses")
+              for _, r in docs.iterrows()}
+    options = list(labels)
+    key = f"{page}_directive_{country}"
+    if st.session_state.get(key) not in options:
+        st.session_state[key] = options[0]
+    with cols[-2]:
+        document_id = st.selectbox("Directive", options, format_func=labels.get, key=key)
+    scope = (f"{len(options)} directives with <b>{_e(name)}</b> clauses. "
+             "Turn off “Only this risk area” to list every directive."
+             if only else f"All {len(options)} {_e(NAMES[country])} directives with tagged clauses.")
+    st.markdown(f'<div class="ws-cat-desc">{scope}</div>', unsafe_allow_html=True)
+    return category_id, document_id
+
+
+def scope_bar(conn, page: str, *, compare: bool = True, category: bool = True,
+              directive: bool = False) -> dict:
+    """Country · Compare with · Risk category (or Directive), shared by every
+    workspace page."""
     countries = list(J)
-    widths = [1.3] + ([2] if compare else []) + ([3, 1.2] if category else [])
+    widths = ([1.3] + ([2] if compare else [])
+              + ([3, 1.2] if category or directive else []))
     cols = st.columns(widths, vertical_alignment="bottom")
     i = 0
     with cols[i]:
@@ -279,6 +313,10 @@ def scope_bar(conn, page: str, *, compare: bool = True, category: bool = True) -
                                           key=f"{page}_compare") or others
         st.session_state["scope_compare"] = compare_with
     category_id = None
+    if directive:
+        category_id, document_id = _directive_bar(conn, page, country, cols)
+        return {"country": country, "compare": compare_with, "category": category_id,
+                "directive": document_id}
     if category:
         with cols[-1]:
             orm_only = st.toggle("ORM core only",
@@ -460,14 +498,27 @@ def _same_clause_matches(frame):
     return frame[frame["text_similarity"].map(match.same_clause)].reset_index(drop=True)
 
 
-def render_clause_explorer(conn, country: str, category_id: str,
-                           others: list[str] | None = None) -> None:
-    """Four panes: clause list, the clause, equivalents, and an ORM review."""
+def _clause_categories(row) -> list[str]:
+    return [c for c in str(row.get("categories") or "").split(",") if c in taxonomy.BY_ID]
+
+
+def render_clause_explorer(conn, country: str, document_id: str | None,
+                           home_category: str, others: list[str] | None = None) -> None:
+    """Four panes: the directive's clauses, the clause, equivalents, and an ORM review."""
     others = others or [j for j in J if j != country]
-    rows = queries.clauses(conn, country, category_id,
-                           query=st.session_state.get("ws_clause_query", ""))
-    other_has_text = {j: queries.has_text_in_category(conn, j, category_id)
-                      for j in others}
+    if not document_id:
+        st.markdown(notice(
+            f"{NAMES[country]} has no directive with indexed, tagged clauses here yet."
+            " Turn off “Only this risk area”, or run "
+            "<code>python orm_pipeline.py build --fetch</code>."),
+            unsafe_allow_html=True)
+        return
+    rows = queries.directive_clauses(conn, document_id,
+                                     query=st.session_state.get("ws_clause_query", ""))
+    text_counts = {j: queries.category_counts(conn, j) for j in others}
+
+    def has_text(j: str, cats: list[str]) -> bool:
+        return any(text_counts[j].get(c, 0) > 0 for c in cats)
 
     left, mid, right, review_col = st.columns([2.3, 3.1, 3.2, 3.0], gap="medium")
     with left:
@@ -478,52 +529,45 @@ def render_clause_explorer(conn, country: str, category_id: str,
                       placeholder="e.g. notify, exit strategy, 24 hours",
                       label_visibility="collapsed")
         if rows.empty:
-            docs = queries.category_documents(conn, category_id, country)
-            if st.session_state.get("ws_clause_query", "").strip():
-                msg = "No clauses match this filter."
-            elif docs.empty:
-                msg = (f"{NAMES[country]} has no documents mapped to this category.")
-            else:
-                msg = (f"{NAMES[country]} has {_plural(len(docs), 'document')} in this "
-                       "category, but their text isn't indexed yet. Run "
-                       "<code>python orm_pipeline.py build --fetch</code>.")
+            msg = ("No clauses match this filter."
+                   if st.session_state.get("ws_clause_query", "").strip()
+                   else "This directive has no indexed clauses.")
             st.markdown(notice(msg), unsafe_allow_html=True)
             return
 
         ids = rows["provision_id"].tolist()
-        key = f"ws_selected_{country}_{category_id}"
+        key = f"ws_selected_{country}_{document_id}"
         if st.session_state.get(key) not in ids:
-            st.session_state[key] = ids[0]
+            tagged = rows[rows["categories"].str.contains(home_category, regex=False)]
+            st.session_state[key] = int((tagged if not tagged.empty else rows)
+                                        .iloc[0]["provision_id"])
         selected_id = st.session_state[key]
-        filtering = bool(st.session_state.get("ws_clause_query", "").strip())
-        groups = [group for _doc_id, group in rows.groupby("document_id", sort=False)]
-        groups.sort(key=lambda group: _directive_sort_key(group.iloc[0]))
         with st.container(height=640, border=False):
-            for group in groups:
-                first = group.iloc[0]
-                title = " ".join(
-                    part for part in (first["doc_ref"], first["doc_title"]) if part)
-                open_group = filtering or selected_id in set(group["provision_id"])
-                with st.expander(
-                        f"{title}  ·  {_plural(len(group), 'clause')}",
-                        expanded=open_group):
-                    for _, c in group.iterrows():
-                        pid = int(c["provision_id"])
-                        n = int(c["matches"])
-                        if n:
-                            state = _plural(n, "equivalent")
-                        elif any(other_has_text.values()):
-                            state = "possible gap"
-                        else:
-                            state = "not assessed"
-                        label = f'{c["ref"] or "¶"}   {_short(c["text"], 90)}   ·  {state}'
-                        label = re.sub(r"[*_`\[\]#<>$~|]", "", label)
-                        if st.button(label, key=f"ws_clause_{pid}", width="stretch",
-                                     type="primary" if pid == selected_id else "secondary"):
-                            st.session_state[key] = pid
-                            st.rerun()
+            for _, c in rows.iterrows():
+                pid = int(c["provision_id"])
+                cats = _clause_categories(c)
+                n = int(c["matches"])
+                if n:
+                    state = _plural(n, "equivalent")
+                elif not cats:
+                    state = "not tagged"
+                elif any(has_text(j, cats) for j in others):
+                    state = "possible gap"
+                else:
+                    state = "not assessed"
+                label = f'{c["ref"] or "¶"}   {_short(c["text"], 90)}   ·  {state}'
+                label = re.sub(r"[*_`\[\]#<>$~|]", "", label)
+                if st.button(label, key=f"ws_clause_{pid}", width="stretch",
+                             type="primary" if pid == selected_id else "secondary"):
+                    st.session_state[key] = pid
+                    st.rerun()
 
     clause = queries.clause(conn, selected_id)
+    selected_row = rows[rows["provision_id"] == selected_id].iloc[0]
+    clause_cats = _clause_categories(selected_row)
+    category_id = (home_category if home_category in clause_cats
+                   else clause_cats[0] if clause_cats else home_category)
+    other_has_text = {j: has_text(j, clause_cats) for j in others}
     with mid:
         st.markdown(pane_head("Selected clause"), unsafe_allow_html=True)
         attrs = queries.provision_attributes(conn, [selected_id]).get(selected_id, {})
@@ -534,15 +578,16 @@ def render_clause_explorer(conn, country: str, category_id: str,
         checks = queries.provision_expectations(conn, selected_id)
         checklist = ("".join(f'<span class="tag">✓ {_e(x)}</span>' for x in checks)
                      if checks else "")
+        areas = "".join(f'<span class="tag">{_e(taxonomy.BY_ID[c].name)}</span>'
+                        for c in clause_cats)
         st.markdown(
             f'<div class="ws-selected">{_cite(clause)}'
             f'<div class="law ws-scroll">'
             f'{_highlight(clause["text"], classify.matched_keywords(category_id, clause["text"]))}'
-            f'</div><div>{tags}{checklist}</div></div>', unsafe_allow_html=True)
+            f'</div><div>{areas}{tags}{checklist}</div></div>', unsafe_allow_html=True)
 
+    matches = _same_clause_matches(queries.equivalents(conn, selected_id))
     with right:
-        matches = _same_clause_matches(
-            queries.equivalents(conn, selected_id, category_id))
         showed_match = False
         for j in others:
             mj = matches[matches["jurisdiction"] == j]
@@ -550,7 +595,11 @@ def render_clause_explorer(conn, country: str, category_id: str,
                                   count=_plural(len(mj), "suggestion") if len(mj) else ""),
                         unsafe_allow_html=True)
             if mj.empty:
-                if not other_has_text[j]:
+                if not clause_cats:
+                    msg = ("<b>Not assessed.</b> This clause has no risk-category tag, "
+                           f"so it was not matched against {NAMES[j]}.")
+                    st.markdown(notice(msg), unsafe_allow_html=True)
+                elif not other_has_text[j]:
                     msg = (f"<b>Not assessed.</b> {NAMES[j]} has no indexed text in "
                            "this category yet, so it can't be compared.")
                     st.markdown(notice(msg), unsafe_allow_html=True)
@@ -604,8 +653,6 @@ def render_clause_explorer(conn, country: str, category_id: str,
         st.markdown(pane_head("ORM review"), unsafe_allow_html=True)
         st.caption("Clause-level differences. A difference is not a compliance gap, "
                    "and the stricter clause does not satisfy the other jurisdiction.")
-        matches = _same_clause_matches(
-            queries.equivalents(conn, selected_id, category_id))
         for j in others:
             st.markdown(pane_head(NAMES[j], country=j), unsafe_allow_html=True)
             mj = matches[matches["jurisdiction"] == j]
@@ -651,7 +698,8 @@ _STATUS_TEXT = {
 }
 
 
-def render_full_directive(conn, country: str, category_id: str) -> None:
+def render_full_directive(conn, country: str, category_id: str,
+                          document_id: str | None = None) -> None:
     """Read one directive from start to finish -- every clause, in order,
     with the clauses tagged for the current risk category marked."""
     docs = queries.documents(conn, country)
@@ -684,8 +732,11 @@ def render_full_directive(conn, country: str, category_id: str) -> None:
               for _, r in read.iterrows()}
     c1, c2 = st.columns([4, 1.4], vertical_alignment="bottom")
     with c1:
-        doc_id = st.selectbox("Document", list(labels), format_func=labels.get,
-                              key=f"ws_read_doc_{country}")
+        if document_id in labels:
+            doc_id = document_id
+        else:
+            doc_id = st.selectbox("Document", list(labels), format_func=labels.get,
+                                  key=f"ws_read_doc_{country}")
     with c2:
         only_tagged = st.toggle("Only this category", value=False,
                                 key=f"ws_read_only_{country}")
@@ -1015,13 +1066,14 @@ def page_compare(path: str | None = None) -> None:
                 "appear beside it, with citations.")
     with _open(path) as conn:
         render_status(conn)
-        scope = scope_bar(conn, "compare")
+        scope = scope_bar(conn, "compare", directive=True)
         clauses, full, side = st.tabs(["Clauses", "Full document", "All clauses side by side"])
         with clauses:
-            render_clause_explorer(conn, scope["country"], scope["category"],
-                                   scope["compare"])
+            render_clause_explorer(conn, scope["country"], scope["directive"],
+                                   scope["category"], scope["compare"])
         with full:
-            render_full_directive(conn, scope["country"], scope["category"])
+            render_full_directive(conn, scope["country"], scope["category"],
+                                  scope["directive"])
         with side:
             query = st.text_input("Search clauses in this category", "",
                                   placeholder="e.g. notify, outsourcing, 24 hours",

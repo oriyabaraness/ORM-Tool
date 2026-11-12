@@ -264,8 +264,9 @@ def passages(conn: sqlite3.Connection, jurisdiction: str,
 
 
 def equivalents(conn: sqlite3.Connection, provision_id: int,
-                category_id: str) -> pd.DataFrame:
-    """The clause's best matches in other countries, strongest first."""
+                category_id: str | None = None) -> pd.DataFrame:
+    """The clause's best matches in other countries, strongest first. Without
+    a category, matches from every category the clause is tagged with."""
     df = _df(conn, """
         SELECT m.match_id AS provision_id, m.score, m.text_similarity,
                m.shared_expectations, m.shared_terms,
@@ -274,9 +275,10 @@ def equivalents(conn: sqlite3.Connection, provision_id: int,
         FROM provision_match m
         JOIN provision p ON p.id = m.match_id
         JOIN document d ON d.id = p.document_id
-        WHERE m.provision_id = ? AND m.category_id = ?
+        WHERE m.provision_id = ? AND (? IS NULL OR m.category_id = ?)
         ORDER BY d.jurisdiction, m.score DESC
-    """, (int(provision_id), category_id))
+    """, (int(provision_id), category_id, category_id))
+    df = df.drop_duplicates("provision_id").reset_index(drop=True)
     labels = {e.id: e.label for _c, e in taxonomy.ALL_EXPECTATIONS}
     df["shared_expectation_labels"] = [
         [labels.get(x, x) for x in (s or "").split(",") if x]
@@ -287,6 +289,49 @@ def equivalents(conn: sqlite3.Connection, provision_id: int,
 def has_text_in_category(conn: sqlite3.Connection, jurisdiction: str,
                          category_id: str) -> bool:
     return category_counts(conn, jurisdiction).get(category_id, 0) > 0
+
+
+def directives(conn: sqlite3.Connection, jurisdiction: str,
+               category_id: str | None = None) -> pd.DataFrame:
+    """Directives of one country that have tagged clauses, in that category
+    when one is given."""
+    df = _df(conn, """
+        SELECT d.id AS document_id, d.ref AS doc_ref, d.title AS doc_title,
+               (SELECT COUNT(*) FROM provision p WHERE p.document_id = d.id) AS clauses,
+               (SELECT COUNT(DISTINCT pc.provision_id) FROM provision_category pc
+                 JOIN provision p ON p.id = pc.provision_id
+                 WHERE p.document_id = d.id AND pc.reviewed >= 0
+                   AND (? IS NULL OR pc.category_id = ?)) AS tagged
+        FROM document d
+        WHERE d.jurisdiction = ? AND d.text_status = 'ok'
+    """, (category_id, category_id, jurisdiction))
+    return df[(df["clauses"] > 0) & (df["tagged"] > 0)].reset_index(drop=True)
+
+
+def directive_clauses(conn: sqlite3.Connection, document_id: str,
+                      query: str = "") -> pd.DataFrame:
+    """Every clause of one directive in reading order, with its risk tags and
+    how many cross-country equivalents state the same requirement."""
+    extra = ""
+    if query.strip():
+        ids = db.search_provisions(conn, query, limit=5000)
+        if not ids:
+            return pd.DataFrame(columns=["provision_id", "document_id", "doc_ref",
+                                         "doc_title", "ref", "text", "categories",
+                                         "matches"])
+        extra = f" AND p.id IN ({','.join(str(int(i)) for i in ids)})"
+    return _df(conn, f"""
+        SELECT p.id AS provision_id, d.id AS document_id, d.ref AS doc_ref,
+               d.title AS doc_title, p.ref, p.text,
+               COALESCE((SELECT GROUP_CONCAT(pc.category_id) FROM provision_category pc
+                 WHERE pc.provision_id = p.id AND pc.reviewed >= 0), '') AS categories,
+               (SELECT COUNT(DISTINCT m.match_id) FROM provision_match m
+                 WHERE m.provision_id = p.id AND m.text_similarity >= ?) AS matches
+        FROM provision p
+        JOIN document d ON d.id = p.document_id
+        WHERE p.document_id = ? {extra}
+        ORDER BY p.seq
+    """, (match.SAME_CLAUSE_SIMILARITY, document_id))
 
 
 # --- full directive reader ----------------------------------------------------
