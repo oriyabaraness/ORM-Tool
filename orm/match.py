@@ -87,6 +87,14 @@ def jaccard(a: set, b: set) -> float:
 
 TEXT_WEIGHT, EXPECTATION_WEIGHT = 0.7, 0.3
 MIN_SCORE = 0.06
+# Checklist overlap can pair a capital clause with an IT annex. A comparison
+# is clause-for-clause only when the wording itself is about the same requirement.
+SAME_CLAUSE_SIMILARITY = 0.25
+
+
+def same_clause(text_similarity: float) -> bool:
+    """True when two clauses are close enough in wording to compare."""
+    return float(text_similarity or 0) >= SAME_CLAUSE_SIMILARITY
 
 
 def compute_matches(conn: sqlite3.Connection, top_n: int = 5) -> int:

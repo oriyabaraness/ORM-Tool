@@ -507,7 +507,14 @@ def _trim(text: str, source: str) -> str:
             words = text.split()
     if len(words) > 16:
         text = " ".join(words[:16])
-    return text.strip(" .;,")
+    # A cut must not stop on "including" or "and", which changes the duty.
+    previous = None
+    while previous != text:
+        previous = text
+        text = re.sub(
+            r"(?:[,;:]|\b(?:including|and|or|to|of|for|with|by|that)\b)\s*$",
+            "", text, flags=re.I).strip(" .;,")
+    return text
 
 
 def _only(items: list[dict], others: list[dict]) -> list[dict]:
@@ -599,9 +606,10 @@ def _join(parts) -> str:
 
 def _topic(text: str) -> str:
     plain = re.sub(r"\s+", " ", text).strip()
+    # "2. Risk weighted assets" must keep the words after the clause number.
+    plain = re.sub(r"^(?:article\s*\([^)]*\)\s*:?\s*)?\d+[.)]\s*", "",
+                   plain, flags=re.I).strip()
     sentence = re.split(r"(?<=[.])\s+", plain)[0] if plain else ""
-    sentence = re.sub(r"^(?:article\s*\([^)]*\)\s*:?\s*)?\d+[.)]\s*", "",
-                      sentence, flags=re.I).strip()
     words = sentence.split()
     if len(words) > 18:
         sentence = " ".join(words[:18]).rstrip(".,;") + "…"

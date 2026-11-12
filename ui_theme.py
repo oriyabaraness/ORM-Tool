@@ -20,25 +20,28 @@ COUNTRY_ACCENT = {"IL": "#006d7e", "JO": "#9b2f4a", "TR": "#8a6a1f",
 
 THEME_CSS = """
 <style>
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap");
+@import url("https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap");
 :root {
-  --ink: #14171f; --ink-2: #4a5160; --ink-3: #7b8292;
-  --line: #e3e5ea; --surface: #ffffff; --canvas: #f6f7f9; --subtle: #f0f2f5;
-  --primary: #17345b; --primary-hover: #102845; --focus: #3b6fd8;
-  --found: #2f7a4a; --found-bg: #e8f3ec;
-  --partial: #9a6a00; --partial-bg: #fbf2dc;
-  --gap: #b3261e; --gap-bg: #fbe9e7;
-  --na: #7b8292; --na-bg: #f0f2f5;
+  --ink: #0a2540; --ink-2: #425466; --ink-3: #6b7c93;
+  --line: #e3e8ee; --surface: #ffffff; --canvas: #f6f9fc; --subtle: #f6f9fc;
+  --primary: #635bff; --primary-hover: #0a2540; --focus: #635bff;
+  --found: #1f7a4d; --found-bg: #e7f6ee;
+  --partial: #9a6a00; --partial-bg: #fbf6e8;
+  --gap: #b3261e; --gap-bg: #fdeceb;
+  --na: #6b7c93; --na-bg: #f6f9fc;
   --highlight: #fff1b8;
   --il: #006d7e; --jo: #9b2f4a;
-  --ui: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --ui: "General Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --serif: "Source Serif 4", Georgia, "Times New Roman", serif;
 }
 
 /* ---- app chrome ---------------------------------------------------- */
+html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
 html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
   background: var(--canvas); color: var(--ink);
 }
+[data-testid="stDecoration"] {display: none;}
 /* Inter everywhere except code and Material icon ligatures.
    Streamlit draws icons as a span (data-testid="stIconMaterial") whose text
    is the ligature name — compare_arrows, grid_view, schedule, and so on.
@@ -46,6 +49,7 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
    turns the ligature into visible text and it paints over the nav label. */
 [data-testid="stAppViewContainer"] *:not([data-testid="stIconMaterial"]):not([class*="material"]):not(code):not(pre) {
   font-family: var(--ui);
+  letter-spacing: -0.011em;
 }
 [data-testid="stIconMaterial"] {
   font-family: "Material Symbols Rounded" !important;
@@ -63,36 +67,45 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
 }
 [data-testid="stHeader"] {background: transparent;}
 [data-testid="stMainBlockContainer"], .block-container {
-  padding-top: 1.6rem; padding-bottom: 3rem; max-width: 100%;
+  padding-top: 2rem; padding-bottom: 3.5rem; max-width: 100%;
 }
-p, li, label, .stMarkdown {font-size: 14px; line-height: 1.45;}
-h1, h2, h3 {color: var(--ink); letter-spacing: -0.01em;}
-h2 {font-size: 17px !important; font-weight: 600 !important; margin: 18px 0 6px !important;}
-h3 {font-size: 15px !important; font-weight: 600 !important;}
-a {color: var(--primary);}
+p, li, label, .stMarkdown {font-size: 14.5px; line-height: 1.55;}
+h1, h2, h3 {color: var(--ink); letter-spacing: -0.03em; font-weight: 500;}
+h2 {font-size: 18px !important; font-weight: 500 !important; margin: 20px 0 8px !important;}
+h3 {font-size: 15px !important; font-weight: 500 !important;}
+a {color: var(--primary); text-underline-offset: 2px;}
+a:hover {color: var(--primary-hover);}
 code {font-size: 12.5px; background: var(--subtle); color: var(--ink); padding: 1px 4px;
   border-radius: 4px;}
 *:focus-visible {outline: 2px solid var(--focus) !important; outline-offset: 1px;}
 .tabular, [data-testid="stMetricValue"] {font-variant-numeric: tabular-nums;}
 
-/* left rail */
-[data-testid="stSidebar"] {background: var(--surface); border-right: 1px solid var(--line);}
-[data-testid="stSidebar"] [data-testid="stSidebarContent"] {padding-top: 6px;}
+/* left rail — same navy as the home header */
+[data-testid="stSidebar"] {background: #0c2340; border-right: none;}
+[data-testid="stSidebar"] [data-testid="stSidebarContent"] {padding-top: 8px;}
+[data-testid="stSidebarNav"]::before {
+  content: "Clausewiz"; display: block; width: fit-content; color: #fff;
+  font-weight: 500; font-size: 22px; line-height: 1; letter-spacing: -0.048em;
+  margin: 10px 16px 18px; padding: 0 0 10px;
+  border-bottom: 1px solid rgba(255,255,255,.35);
+}
 [data-testid="stSidebarNav"] [data-testid="stNavSectionHeader"],
-[data-testid="stSidebarNav"] header {
-  font-size: 11px !important; text-transform: uppercase; letter-spacing: .06em;
-  color: var(--ink-3) !important; font-weight: 600 !important;
+[data-testid="stSidebarNav"] header {display: none;}
+[data-testid="stSidebarNavLink"] [data-testid="stIconMaterial"] {display: none;}
+[data-testid="stSidebarNavLink"] {border-radius: 8px; padding: 7px 12px; margin: 1px 8px;}
+[data-testid="stSidebarNavLink"] span:not([data-testid="stIconMaterial"]) {
+  font-size: 14px; color: rgba(255,255,255,.82); font-weight: 500;
 }
-[data-testid="stSidebarNavLink"] {border-radius: 6px; padding: 5px 10px;}
-[data-testid="stSidebarNavLink"] span:not([data-testid="stIconMaterial"]) {font-size: 14px; color: var(--ink-2);}
-[data-testid="stSidebarNavLink"]:hover {background: var(--subtle);}
+[data-testid="stSidebarNavLink"]:hover {background: rgba(255,255,255,.08);}
 [data-testid="stSidebarNavLink"][aria-current="page"] {
-  background: var(--subtle); box-shadow: inset 3px 0 0 var(--primary);
+  background: #1b3a66; box-shadow: none;
 }
-[data-testid="stSidebarNavLink"][aria-current="page"] span:not([data-testid="stIconMaterial"]) {color: var(--primary); font-weight: 600;}
-.app-brand {font-weight: 600; font-size: 15px; color: var(--ink); padding: 2px 10px 0;}
-.app-brand small {display: block; font-weight: 400; font-size: 12px; color: var(--ink-3);}
-.app-rail-foot {font-size: 12px; color: var(--ink-3); padding: 0 10px; line-height: 1.5;}
+[data-testid="stSidebarNavLink"][aria-current="page"] span:not([data-testid="stIconMaterial"]) {
+  color: #fff; font-weight: 600;
+}
+.app-brand {font-weight: 600; font-size: 16px; letter-spacing: -0.03em; color: #fff; padding: 2px 10px 0;}
+.app-brand small {display: block; font-weight: 400; font-size: 12px; color: rgba(255,255,255,.6);}
+.app-rail-foot {font-size: 12px; color: rgba(255,255,255,.55); padding: 8px 16px; line-height: 1.5;}
 
 /* widgets */
 [data-testid="stWidgetLabel"] p, [data-testid="stWidgetLabel"] label {
@@ -100,11 +113,11 @@ code {font-size: 12.5px; background: var(--subtle); color: var(--ink); padding: 
 }
 div[data-baseweb="select"] > div, div[data-baseweb="input"], .stTextInput input,
 .stTextArea textarea {
-  border-radius: 6px !important; border-color: var(--line) !important;
+  border-radius: 8px !important; border-color: var(--line) !important;
   background: var(--surface) !important; font-size: 14px;
 }
 .stButton button, .stDownloadButton button, [data-testid="stPopover"] button {
-  border-radius: 4px; font-size: 13px; font-weight: 500; box-shadow: none;
+  border-radius: 8px; font-size: 13.5px; font-weight: 500; box-shadow: none;
   border: 1px solid var(--line); background: var(--surface); color: var(--ink);
 }
 .stButton button:hover, .stDownloadButton button:hover {border-color: var(--ink-3); color: var(--ink);}
@@ -121,28 +134,29 @@ div[data-baseweb="select"] > div, div[data-baseweb="input"], .stTextInput input,
 [data-baseweb="tab-highlight"] {background: var(--primary) !important; height: 2px;}
 [data-baseweb="tab-border"] {display: none;}
 [data-testid="stMetric"] {background: var(--surface); border: 1px solid var(--line);
-  border-radius: 6px; padding: 10px 12px;}
+  border-radius: 10px; padding: 12px 14px;}
 [data-testid="stMetricLabel"] p {font-size: 12px !important; color: var(--ink-3);}
 [data-testid="stMetricValue"] {font-size: 22px !important; color: var(--ink);}
-[data-testid="stExpander"] details {border: 1px solid var(--line); border-radius: 6px;
+[data-testid="stExpander"] details {border: 1px solid var(--line); border-radius: 10px;
   background: var(--surface);}
 [data-testid="stDataFrame"], [data-testid="stTable"] {border: 1px solid var(--line);
-  border-radius: 6px; background: var(--surface);}
-[data-testid="stAlert"] {border-radius: 6px;}
+  border-radius: 10px; background: var(--surface);}
+[data-testid="stAlert"] {border-radius: 10px;}
 hr {border-color: var(--line) !important;}
 
 /* ---- building blocks ----------------------------------------------- */
 .page-head {display: flex; justify-content: space-between; align-items: flex-end;
   gap: 16px; border-bottom: 1px solid var(--line); padding-bottom: 10px; margin-bottom: 14px;}
-.page-title {font-size: 20px; line-height: 1.3; font-weight: 600; color: var(--ink); margin: 0;}
-.page-sub {font-size: 13px; color: var(--ink-2); margin-top: 2px; max-width: 820px;}
-.pane-head {font-size: 12px; text-transform: uppercase; letter-spacing: .04em;
-  font-weight: 600; color: var(--ink-2); padding: 0 0 6px; margin: 4px 0 8px;
+.page-title {font-size: 28px; line-height: 1.15; font-weight: 500; letter-spacing: -0.035em;
+  color: var(--ink); margin: 0;}
+.page-sub {font-size: 14px; color: var(--ink-2); margin-top: 6px; max-width: 820px;}
+.pane-head {font-size: 13px; letter-spacing: -0.02em;
+  font-weight: 600; color: var(--ink); padding: 0 0 8px; margin: 4px 0 10px;
   border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 8px;}
 .pane-head .dot {width: 8px; height: 8px; border-radius: 50%; display: inline-block;}
 .pane-head .count {margin-left: auto; text-transform: none; letter-spacing: 0;
   font-weight: 500; color: var(--ink-3); font-variant-numeric: tabular-nums;}
-.notice {background: var(--subtle); border: 1px solid var(--line); border-radius: 6px;
+.notice {background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
   padding: 10px 12px; font-size: 13px; color: var(--ink-2); margin: 6px 0 10px;}
 .notice.warn {background: var(--partial-bg); border-color: #f0dfb1; color: #5c4300;}
 .notice.gap {background: var(--gap-bg); border-color: #f3cfca; color: #7d1c15;}
@@ -164,13 +178,13 @@ hr {border-color: var(--line) !important;}
   color: var(--ink);}
 .law * {font-family: var(--serif) !important;}
 mark {background: var(--highlight); color: inherit; padding: 0 1px; border-radius: 2px;}
-.card {background: var(--surface); border: 1px solid var(--line); border-radius: 6px;
+.card {background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
   padding: 12px 14px; margin: 0 0 10px;}
 
 /* ---- older Sources / Market context pieces, restyled to the tokens ---- */
 .boi-section-title {font-size: 17px; font-weight: 600; color: var(--ink); margin: 18px 0 8px;}
-.boi-kicker {font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
-  color: var(--ink-3); font-weight: 600;}
+.boi-kicker {font-size: 12px; letter-spacing: -0.01em;
+  color: var(--ink-3); font-weight: 500;}
 .boi-catalog-shelf {display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 8px; margin: 6px 0 14px;}
 .boi-catalog-type {background: var(--surface); border: 1px solid var(--line);

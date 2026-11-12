@@ -355,6 +355,8 @@ def test_landing_page_states_the_way_in(built_db, monkeypatch):
     assert "not a compliance gap" in page
     assert "Governance" in page
     assert "Israel" in page
+    assert 'href="/compare?country=IL&category=governance"' in page
+    assert 'href="/?country=JO"' in page
 
 
 def test_challenge_says_whether_jordan_has_the_clause():
@@ -413,6 +415,34 @@ def test_clause_matching_pairs_equivalent_clauses(built_db):
         # and the reverse direction exists too
         jo = queries.clauses(conn, "JO", "op_resilience")
         assert (jo["matches"] > 0).all()
+
+
+def test_a_weak_overlap_is_not_compared_as_the_same_clause():
+    from orm import match
+    from orm.review import analyst_brief
+    # Directive 206's capital text shares generic words with a Jordan IT annex.
+    # That overlap is not the same clause, so it is not compared.
+    assert match.same_clause(0.09) is False
+    assert match.same_clause(0.31) is True
+    brief = analyst_brief(
+        "Jordan",
+        "Establish rules and standards needed to build disaster recovery and "
+        "human protection plans, business continuity plans, including building, "
+        "operating, testing, training and updating mechanisms.",
+        "Israel",
+        "The bank shall keep a record of incidents.")
+    text = " ".join(item["text"] for item in brief["executive"])
+    assert "including." not in text
+    assert "business continuity plans" in text
+    capital = analyst_brief(
+        "Israel",
+        "2. Risk weighted assets calculation in respect of operational risk. "
+        "The standardized approach applies.",
+        "Jordan", None, assessed=True)
+    capital_text = " ".join(item["text"] for item in capital["executive"])
+    assert "Risk weighted assets" in capital_text
+    assert "selected clause" not in capital_text
+    assert "disaster recovery" not in capital_text
 
 
 def test_match_scoring_helpers():

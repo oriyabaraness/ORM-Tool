@@ -6,7 +6,7 @@ import sqlite3
 
 import pandas as pd
 
-from . import db, taxonomy
+from . import db, match, taxonomy
 
 JURISDICTIONS = ("IL", "JO", "TR")
 JURISDICTION_NAMES = {"IL": "Israel", "JO": "Jordan", "TR": "Turkey"}
@@ -225,7 +225,8 @@ def clauses(conn: sqlite3.Connection, jurisdiction: str, category_id: str,
         SELECT p.id AS provision_id, d.id AS document_id, d.ref AS doc_ref,
                d.title AS doc_title, p.ref, p.text,
                (SELECT COUNT(*) FROM provision_match m
-                 WHERE m.provision_id = p.id AND m.category_id = pc.category_id)
+                 WHERE m.provision_id = p.id AND m.category_id = pc.category_id
+                   AND m.text_similarity >= ?)
                  AS matches
         FROM provision_category pc
         JOIN provision p ON p.id = pc.provision_id
@@ -233,7 +234,7 @@ def clauses(conn: sqlite3.Connection, jurisdiction: str, category_id: str,
         WHERE pc.category_id = ? AND d.jurisdiction = ? AND pc.reviewed >= 0 {extra}
         ORDER BY d.ref, d.id, p.seq
         LIMIT ?
-    """, (category_id, jurisdiction, limit))
+    """, (match.SAME_CLAUSE_SIMILARITY, category_id, jurisdiction, limit))
 
 
 def clause(conn: sqlite3.Connection, provision_id: int) -> dict | None:

@@ -44,46 +44,31 @@ STRENGTH_KIND = {"Strong match": "strong", "Partial match": "partial",
 
 CSS = """
 <style>
-.land {max-width: 880px; margin: 56px auto 72px; position: relative; padding: 0 8px 28px;}
-.land-hero {display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 36px;
-  align-items: center; min-height: 240px;}
-.land h1 {font-family: var(--ui) !important; font-size: 40px; line-height: 1.12;
-  font-weight: 600; letter-spacing: -0.025em; color: var(--ink); margin: 0 0 22px;}
-.land-more {color: var(--primary); font-size: 14.5px; font-weight: 500;
-  text-decoration: none;}
-.land-more:hover {color: var(--primary-hover);}
-.land-card {background: var(--subtle); border-radius: 10px; min-height: 200px;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  text-align: center; padding: 28px 22px; margin-top: 8px;}
-.land-brand {font-size: 28px; font-weight: 600; letter-spacing: -0.03em; color: var(--ink);}
-.land-countries {margin-top: 16px; display: flex; flex-direction: column; gap: 6px;
-  font-size: 13px; color: var(--ink-2);}
-.land-countries span {display: block;}
-.land-countries .dot {width: 7px; height: 7px; border-radius: 50%; display: inline-block;
-  margin-right: 6px; vertical-align: 1px;}
-.land-rule {position: relative; border-top: 1px solid var(--line); margin: 28px 0 32px;}
-.land-rule i {position: absolute; left: 50%; top: -2px; transform: translateX(-50%);
-  width: 84px; height: 3px; background: var(--primary); display: block;}
-.land-cols {display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;}
-.land-col {padding: 4px 22px 8px 20px; border-left: 1px dashed var(--line); min-height: 132px;}
-.land-col:first-child {border-left: none; padding-left: 4px;}
-.land-ico {width: 28px; height: 28px; margin-bottom: 14px; color: var(--primary);}
-.land-col h2 {font-family: var(--ui) !important; font-size: 15px; font-weight: 600;
-  color: var(--ink); margin: 0 0 6px;}
-.land-col p {font-size: 13.5px; line-height: 1.45; color: var(--ink-2); margin: 0 0 12px;}
-.land-foot {display: grid; grid-template-columns: 1fr 250px; align-items: start; margin-top: 6px;}
-.land-note {grid-column: 2; justify-self: end; width: 250px; margin-top: 4px;
-  background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
-  padding: 14px 16px 12px; font-size: 13px; line-height: 1.45; color: var(--ink-2);}
-.land-note b {display: block; color: var(--ink); font-weight: 600; margin-bottom: 4px;}
-.land-areas {grid-column: 1 / -1; text-align: center; font-size: 12px; color: var(--ink-3);
-  margin: 22px 0 0;}
+.lib {max-width: 980px; margin: 4px auto 48px;}
+.lib-bar {display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 14px;}
+.lib-bar-label {font-size: 13px; color: var(--ink-3); margin-right: 4px;}
+a.lib-country {text-decoration: none; color: var(--ink); background: #fff;
+  border: 1px solid var(--line); border-radius: 999px; padding: 7px 16px;
+  font-size: 14px; font-weight: 500;}
+a.lib-country:hover {color: var(--ink); background: var(--subtle);}
+a.lib-country.on, a.lib-country.on:hover {background: #0c2340; color: #fff;
+  border-color: #0c2340;}
+.lib-note {font-size: 14px; line-height: 1.45; color: var(--ink-2); margin: 0 0 22px;
+  max-width: 640px;}
+.lib-section {font-family: var(--ui) !important; font-size: 12px; font-weight: 600;
+  letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3);
+  margin: 4px 0 10px;}
+.lib-grid {display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin: 0 0 28px;}
+a.lib-card {display: flex; flex-direction: column; gap: 6px; min-height: 132px;
+  background: #fff; border: 1px solid #e6e6e6; padding: 16px 16px 14px;
+  text-decoration: none; color: inherit;}
+a.lib-card:hover {background: #f7f7f7; color: inherit;}
+a.lib-card b {font-size: 17px; font-weight: 500; letter-spacing: -0.02em;
+  color: #18345c; line-height: 1.25;}
+a.lib-card span {font-size: 13.5px; line-height: 1.4; color: #666;}
+a.lib-card em {margin-top: auto; font-style: normal; font-size: 12px; color: #888;}
 @media (max-width: 800px) {
-  .land {margin-top: 16px;}
-  .land-hero, .land-cols {grid-template-columns: 1fr;}
-  .land-col {border-left: none; padding: 16px 0 0; border-top: 1px dashed var(--line);}
-  .land-foot {grid-template-columns: 1fr;}
-  .land-note {grid-column: 1; justify-self: stretch; width: auto; margin-top: 18px;}
+  .lib-grid {grid-template-columns: 1fr;}
 }
 .ws-status {display: flex; gap: 22px; flex-wrap: wrap; font-size: 12.5px;
   color: var(--ink-3); margin: -4px 0 12px; font-variant-numeric: tabular-nums;}
@@ -94,27 +79,27 @@ CSS = """
 .ws-doc-group {font-size: 12px; color: var(--ink-2); margin: 12px 0 4px; font-weight: 600;}
 .ws-doc-group .ref {color: var(--primary); margin-right: 6px;}
 .ws-selected {background: var(--surface); border: 1px solid var(--line);
-  border-left: 3px solid var(--primary); border-radius: 6px; padding: 12px 14px;}
+  border-left: 3px solid var(--primary); border-radius: 10px; padding: 12px 14px;}
 .ws-scroll {max-height: 520px; overflow-y: auto; padding-right: 6px;}
-.ws-match {background: var(--surface); border: 1px solid var(--line); border-radius: 6px;
+.ws-match {background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
   padding: 10px 12px 12px; margin: 0 0 10px;}
 .ws-match .top {display: flex; align-items: center; gap: 8px; margin-bottom: 6px;}
 .ws-match .bar {flex: 1; height: 3px; background: var(--subtle); border-radius: 2px;}
 .ws-match .bar span {display: block; height: 3px; background: var(--primary); border-radius: 2px;}
 .ws-match .ws-scroll {max-height: 300px;}
 .ws-why {font-size: 12px; color: var(--ink-3); margin-top: 6px;}
-.ws-review {background: var(--surface); border: 1px solid var(--line); border-radius: 6px;
+.ws-review {background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
   padding: 10px 12px 12px; margin: 0 0 10px;}
 .ws-review ul {margin: 8px 0 4px; padding-left: 18px;}
 .ws-review li {margin: 0 0 8px; color: var(--ink); font-size: 13px; line-height: 1.45;}
 .ws-review li:last-child {color: var(--ink-2);}
 .ws-brief {margin: 6px 0 22px; padding-top: 4px; border-top: 1px solid var(--line);}
-.ws-kicker {font-size: 12px; font-weight: 600; letter-spacing: .04em;
-  text-transform: uppercase; color: var(--ink-2); margin: 14px 0 6px;}
+.ws-kicker {font-size: 13px; font-weight: 600; letter-spacing: -0.02em;
+  color: var(--ink); margin: 16px 0 6px;}
 .ws-brief li {font-size: 13px; line-height: 1.45; margin: 0 0 6px; color: var(--ink);}
 .ws-brief .ws-table td:first-child {width: 22%; font-weight: 500;}
 .ws-table {width: 100%; border-collapse: collapse; font-size: 13px; background: var(--surface);
-  border: 1px solid var(--line); border-radius: 6px; overflow: hidden;}
+  border: 1px solid var(--line); border-radius: 10px; overflow: hidden;}
 .ws-table th {text-align: left; font-size: 12px; font-weight: 600; color: var(--ink-2);
   background: var(--canvas); border-bottom: 1px solid var(--line); padding: 8px 12px;
   position: sticky; top: 0;}
@@ -128,7 +113,7 @@ CSS = """
 .ws-table .ev {font-size: 12px; color: var(--ink-2); margin-top: 4px;}
 .ws-legend {display: flex; gap: 14px; flex-wrap: wrap; margin: 8px 0 18px;
   font-size: 12px; color: var(--ink-3);}
-.ws-prov {background: var(--surface); border: 1px solid var(--line); border-radius: 6px;
+.ws-prov {background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
   padding: 10px 12px; margin: 0 0 10px;}
 .ws-read-meta {font-size: 12.5px; color: var(--ink-3); margin: 2px 0 12px;
   font-variant-numeric: tabular-nums;}
@@ -138,7 +123,7 @@ CSS = """
   font-size: 12.5px; margin-right: 6px;}
 .ws-report {font-family: ui-monospace, SFMono-Regular, Menlo, monospace !important;
   font-size: 12.5px; white-space: pre-wrap; background: var(--surface);
-  border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; color: var(--ink-2);}
+  border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; color: var(--ink-2);}
 /* clause list buttons: left-aligned rows, selected = navy rule + tint */
 div[class*="st-key-ws_clause_"] button {justify-content: flex-start; text-align: left;
   border: none !important; border-radius: 0 !important; background: transparent !important;
@@ -227,6 +212,45 @@ def _plural(n: int, word: str) -> str:
 def _remembered(name: str, options: list, default):
     value = st.session_state.get(f"scope_{name}", default)
     return value if value in options else default
+
+
+def _query_value(name: str):
+    params = getattr(st, "query_params", None)
+    if params is None or not hasattr(params, "get"):
+        return None
+    value = params.get(name)
+    if isinstance(value, list):
+        return value[-1] if value else None
+    return value
+
+
+def _library_country() -> str:
+    """Country chosen on the library. The address wins, then the last choice."""
+    chosen = _query_value("country")
+    if chosen in J:
+        st.session_state["scope_country"] = chosen
+        return chosen
+    saved = st.session_state.get("scope_country", "IL")
+    return saved if saved in J else "IL"
+
+
+def _take_library_query() -> None:
+    """A category card opens Compare already scoped to that country and category."""
+    country = _query_value("country")
+    category = _query_value("category")
+    if country not in J and category not in taxonomy.BY_ID:
+        return
+    if country in J:
+        st.session_state["scope_country"] = country
+        st.session_state["compare_country"] = country
+    if category in taxonomy.BY_ID:
+        st.session_state["scope_category"] = category
+        st.session_state["compare_category"] = category
+        if not taxonomy.BY_ID[category].orm_core:
+            st.session_state["scope_core"] = False
+            st.session_state["compare_core"] = False
+    if hasattr(getattr(st, "query_params", None), "clear"):
+        st.query_params.clear()
 
 
 def scope_bar(conn, page: str, *, compare: bool = True, category: bool = True) -> dict:
@@ -426,6 +450,13 @@ def _review_card(notes: dict, home_row, other_row=None) -> str:
     return f'<div class="ws-review">{pill(label, kind)}<ul>{items}</ul>{cites}</div>'
 
 
+def _same_clause_matches(frame):
+    """Drop suggestions whose wording is not the same requirement."""
+    if frame.empty:
+        return frame
+    return frame[frame["text_similarity"].map(match.same_clause)].reset_index(drop=True)
+
+
 def render_clause_explorer(conn, country: str, category_id: str,
                            others: list[str] | None = None) -> None:
     """Four panes: clause list, the clause, equivalents, and an ORM review."""
@@ -507,7 +538,8 @@ def render_clause_explorer(conn, country: str, category_id: str,
             f'</div><div>{tags}{checklist}</div></div>', unsafe_allow_html=True)
 
     with right:
-        matches = queries.equivalents(conn, selected_id, category_id)
+        matches = _same_clause_matches(
+            queries.equivalents(conn, selected_id, category_id))
         showed_match = False
         for j in others:
             mj = matches[matches["jurisdiction"] == j]
@@ -521,8 +553,9 @@ def render_clause_explorer(conn, country: str, category_id: str,
                     st.markdown(notice(msg), unsafe_allow_html=True)
                 else:
                     msg = (f"<b>No comparable clause found in {NAMES[j]}.</b> "
-                           "This may be a gap worth reviewing.")
-                    st.markdown(notice(msg, "gap"), unsafe_allow_html=True)
+                           "No indexed clause states the same requirement. "
+                           "That is not a compliance gap.")
+                    st.markdown(notice(msg), unsafe_allow_html=True)
                     result_key = f"ws_challenge_{selected_id}_{j}"
                     if st.button("Challenge", key=f"ws_challenge_btn_{selected_id}_{j}"):
                         verdict = challenge_clause(
@@ -568,7 +601,8 @@ def render_clause_explorer(conn, country: str, category_id: str,
         st.markdown(pane_head("ORM review"), unsafe_allow_html=True)
         st.caption("Clause-level differences. A difference is not a compliance gap, "
                    "and the stricter clause does not satisfy the other jurisdiction.")
-        matches = queries.equivalents(conn, selected_id, category_id)
+        matches = _same_clause_matches(
+            queries.equivalents(conn, selected_id, category_id))
         for j in others:
             st.markdown(pane_head(NAMES[j], country=j), unsafe_allow_html=True)
             mj = matches[matches["jurisdiction"] == j]
@@ -938,68 +972,43 @@ def render_changes(conn, countries: list[str]) -> None:
 
 # --- pages (registered in the left rail by app.py) --------------------------------
 
-_LAND_ICON = {
-    "compare": '<svg class="land-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M7 7h10M7 12h10M7 17h6"/></svg>',
-    "coverage": '<svg class="land-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="7" height="7"/><rect x="13" y="4" width="7" height="7"/><rect x="4" y="13" width="7" height="7"/><rect x="13" y="13" width="7" height="7"/></svg>',
-    "gaps": '<svg class="land-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M8 6h11M8 12h11M8 18h11"/><path d="M4 6h.01M4 12h.01M4 18h.01"/></svg>',
-}
-
-
-def _home_country_lines(conn) -> str:
-    status = queries.index_status(conn).set_index("jurisdiction")
-    lines = []
-    for j in J:
-        if j in status.index:
-            s = status.loc[j]
-            detail = (f'{int(s["documents"]):,} documents · '
-                      f'{int(s["provisions"]):,} clauses')
-        else:
-            detail = "no indexed text"
-        lines.append(
-            f'<span><i class="dot" style="background:{COUNTRY_ACCENT[j]}"></i>'
-            f'{_e(NAMES[j])} · {_e(detail)}</span>')
-    return "".join(lines)
+def _library_cards(country: str, cats, counts: dict[str, int]) -> str:
+    cards = []
+    for cat in cats:
+        n = int(counts.get(cat.id, 0) or 0)
+        count = f"{n:,} clauses" if n else "No indexed text"
+        cards.append(
+            f'<a class="lib-card" href="/compare?country={country}&category={cat.id}">'
+            f'<b>{_e(cat.name)}</b><span>{_e(cat.description)}</span>'
+            f'<em>{_e(count)}</em></a>')
+    return "".join(cards)
 
 
 def page_home(path: str | None = None) -> None:
-    """Front door, centered: a headline, the covered countries, and three ways in."""
+    """Library: choose a country, then a risk category, then open its clauses."""
+    country = _library_country()
     with _open(path) as conn:
-        countries = _home_country_lines(conn)
-    core = " · ".join(c.name for c in taxonomy.CATEGORIES if c.orm_core)
-    columns = (
-        ("compare", "Compare", "Open a clause. The equivalent clauses appear beside it.",
-         "Open Compare"),
-        ("coverage", "Coverage", "How much of each risk area is indexed in each country.",
-         "See coverage"),
-        ("gaps", "Gaps", "Baseline expectations marked found, not found, or not assessed.",
-         "Review gaps"),
-    )
-    cols = "".join(
-        f'<div class="land-col">{_LAND_ICON[key]}'
-        f'<h2>{_e(title)}</h2><p>{_e(body)}</p>'
-        f'<a class="land-more" href="/{key}">{_e(link)} ›</a></div>'
-        for key, title, body, link in columns)
+        counts = queries.category_counts(conn, country)
+    countries = "".join(
+        f'<a class="lib-country{" on" if j == country else ""}" '
+        f'href="/?country={j}">{_e(NAMES[j])}</a>'
+        for j in J)
+    core = _library_cards(country, [c for c in taxonomy.CATEGORIES if c.orm_core], counts)
+    other = _library_cards(country, [c for c in taxonomy.CATEGORIES if not c.orm_core], counts)
     st.markdown(
-        f'<div class="land">'
-        f'<div class="land-hero">'
-        f'<div><h1>Read one clause beside the same obligation in every covered country.</h1>'
-        f'<a class="land-more" href="/compare">Open Compare ›</a></div>'
-        f'<div class="land-card"><div class="land-brand">{_e(APP_NAME)}</div>'
-        f'<div class="land-countries">{countries}</div></div>'
-        f'</div>'
-        f'<div class="land-rule"><i></i></div>'
-        f'<div class="land-cols">{cols}</div>'
-        f'<div class="land-foot">'
-        f'<div class="land-note"><b>Before you rely on a match</b>'
-        f'A difference in the text is not a compliance gap. '
-        f'A country with no indexed text is not assessed.</div>'
-        f'<div class="land-areas">{_e(core)}</div>'
-        f'</div>'
+        f'<div class="lib">'
+        f'<div class="lib-bar"><span class="lib-bar-label">Country</span>{countries}</div>'
+        f'<div class="lib-section">ORM core</div><div class="lib-grid">{core}</div>'
+        f'<div class="lib-section">Prudential</div><div class="lib-grid">{other}</div>'
+        f'<p class="lib-note">{_e(APP_NAME)}. Open a clause in the category you choose. '
+        f'Equivalents from the other countries appear beside it. A difference in the text '
+        f'is not a compliance gap, and a country with no indexed text is not assessed.</p>'
         f'</div>',
         unsafe_allow_html=True)
 
 
 def page_compare(path: str | None = None) -> None:
+    _take_library_query()
     page_header("Compare", "Pick a clause; its equivalents in the other countries "
                 "appear beside it, with citations.")
     with _open(path) as conn:
