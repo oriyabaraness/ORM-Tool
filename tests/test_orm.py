@@ -354,9 +354,7 @@ def test_landing_page_states_the_way_in(built_db, monkeypatch):
     assert "Open a clause" in page
     assert "not a compliance gap" in page
     assert "Governance" in page
-    assert "Israel" in page
     assert 'href="/compare?country=IL&category=governance"' in page
-    assert 'href="/?country=JO"' in page
 
 
 def test_challenge_says_whether_jordan_has_the_clause():

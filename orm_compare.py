@@ -44,15 +44,11 @@ STRENGTH_KIND = {"Strong match": "strong", "Partial match": "partial",
 
 CSS = """
 <style>
-.lib {max-width: 980px; margin: 4px auto 48px;}
-.lib-bar {display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 14px;}
-.lib-bar-label {font-size: 13px; color: var(--ink-3); margin-right: 4px;}
-a.lib-country {text-decoration: none; color: var(--ink); background: #fff;
-  border: 1px solid var(--line); border-radius: 999px; padding: 7px 16px;
-  font-size: 14px; font-weight: 500;}
-a.lib-country:hover {color: var(--ink); background: var(--subtle);}
-a.lib-country.on, a.lib-country.on:hover {background: #0c2340; color: #fff;
-  border-color: #0c2340;}
+[data-testid="stMain"]:has(.lib) [data-testid="stMainBlockContainer"] {
+  max-width: 980px; margin-left: auto; margin-right: auto;
+}
+[data-testid="stMain"]:has(.lib) [data-testid="stSelectbox"] {max-width: 260px; margin-bottom: 8px;}
+.lib {max-width: 980px; margin: 0 auto 48px;}
 .lib-note {font-size: 14px; line-height: 1.45; color: var(--ink-2); margin: 0 0 22px;
   max-width: 640px;}
 .lib-section {font-family: var(--ui) !important; font-size: 12px; font-weight: 600;
@@ -229,8 +225,15 @@ def _library_country() -> str:
     chosen = _query_value("country")
     if chosen in J:
         st.session_state["scope_country"] = chosen
+        st.session_state["home_country"] = chosen
+        params = getattr(st, "query_params", None)
+        if params is not None and hasattr(params, "__delitem__"):
+            try:
+                del params["country"]
+            except KeyError:
+                pass
         return chosen
-    saved = st.session_state.get("scope_country", "IL")
+    saved = st.session_state.get("home_country") or st.session_state.get("scope_country", "IL")
     return saved if saved in J else "IL"
 
 
@@ -987,17 +990,16 @@ def _library_cards(country: str, cats, counts: dict[str, int]) -> str:
 def page_home(path: str | None = None) -> None:
     """Library: choose a country, then a risk category, then open its clauses."""
     country = _library_country()
+    if st.session_state.get("home_country") not in J:
+        st.session_state["home_country"] = country
+    country = st.selectbox("Country", list(J), format_func=NAMES.get, key="home_country")
+    st.session_state["scope_country"] = country
     with _open(path) as conn:
         counts = queries.category_counts(conn, country)
-    countries = "".join(
-        f'<a class="lib-country{" on" if j == country else ""}" '
-        f'href="/?country={j}">{_e(NAMES[j])}</a>'
-        for j in J)
     core = _library_cards(country, [c for c in taxonomy.CATEGORIES if c.orm_core], counts)
     other = _library_cards(country, [c for c in taxonomy.CATEGORIES if not c.orm_core], counts)
     st.markdown(
         f'<div class="lib">'
-        f'<div class="lib-bar"><span class="lib-bar-label">Country</span>{countries}</div>'
         f'<div class="lib-section">ORM core</div><div class="lib-grid">{core}</div>'
         f'<div class="lib-section">Prudential</div><div class="lib-grid">{other}</div>'
         f'<p class="lib-note">{_e(APP_NAME)}. Open a clause in the category you choose. '
