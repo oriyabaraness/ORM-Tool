@@ -915,8 +915,47 @@ def test_ai_review_table_of_contents_is_not_a_requirement(monkeypatch):
     assert result["status"] == "not_a_requirement"
     assert result["points"] == []
     assert calls == []                    # no paid call for a contents line
+    assert llm_review.is_not_a_requirement(
+        "Supervisor of Banks: Proper Conduct of Banking Business [28] (1/22) Board of "
+        "Directors Page 301- 1 ONLY THE HEBREW VERSION IS BINDING Table of Contents")
+    assert not llm_review.is_not_a_requirement(_HOME)
     assert llm_review.verify({"status": "aligned", "headline": "Same."},
                              _HOME, "Article (1) Scope")["status"] == "not_a_requirement"
+
+
+def test_ai_review_card_shows_model_text_as_plain_text(monkeypatch):
+    monkeypatch.setitem(sys.modules, "streamlit", _fake_streamlit([]))
+    sys.modules.pop("orm_compare", None)
+    sys.modules.pop("ui_theme", None)
+    orm_compare = importlib.import_module("orm_compare")
+    ai = {"status": "differs", "headline": "<script>alert(1)</script>",
+          "points": [{"text": "<b>bold</b>", "quotes": [{"from": "home", "text": "a < b"}]}],
+          "so_what": "", "check_internally": []}
+    card = orm_compare._ai_review_card(ai, "Israel", "Jordan",
+                                       {"regulator": "Bank of Israel", "doc_ref": "D1"})
+    assert "<script>" not in card and "&lt;script&gt;" in card
+    assert "&lt;b&gt;bold" in card and "a &lt; b" in card
+    assert "not a compliance gap" in card
+    assert 'class="ws-notes"' not in card       # AI bullets are not greyed
+
+
+def test_clause_filter_belongs_to_one_directive(built_db, monkeypatch):
+    rendered: list[str] = []
+    monkeypatch.setitem(sys.modules, "streamlit", _fake_streamlit(rendered))
+    sys.modules.pop("orm_compare", None)
+    sys.modules.pop("ui_theme", None)
+    orm_compare = importlib.import_module("orm_compare")
+    state = sys.modules["streamlit"].session_state
+    state["scope_category"] = "op_resilience"
+    state["ws_clause_query_JO-TEST-1"] = "no such words anywhere"
+    orm_compare.render_risk_compare_section(built_db)
+    page = "\n".join(rendered)
+    assert "No clauses match this filter." not in page
+    assert "Directive 999" in page
+    rendered.clear()
+    state["ws_clause_query_IL-TEST-1"] = "no such words anywhere"
+    orm_compare.render_risk_compare_section(built_db)
+    assert "No clauses match this filter." in "\n".join(rendered)
 
 
 def test_ai_review_is_saved_offline_and_shown_on_compare(built_db, tmp_path, monkeypatch):

@@ -72,6 +72,7 @@ _DUTY = re.compile(
     r"\b(?:shall|must|should|required|requires|is expected|are expected|"
     r"may not|prohibited|ensure)\b", re.I)
 _PAGE_REF = re.compile(r"\b\d{1,4}\s*[-–]\s*\d{1,3}\b|\.{4,}")
+_COVER = re.compile(r"\btable of contents\b|\bonly the hebrew version is binding\b", re.I)
 _DEFINITION = re.compile(r"^\W*(?:\d+[.)]\s*)?definitions?\b|\"[^\"]{2,60}\"\s+means\b", re.I)
 _INVENTED = re.compile(
     r"\b(?:penalt\w*|fines?|fined|costs?|costly|severity|severe)\b", re.I)
@@ -93,7 +94,8 @@ def is_not_a_requirement(text: str) -> bool:
         return True
     if _DUTY.search(plain):
         return False
-    return len(plain.split()) <= 12 or bool(_DEFINITION.search(plain))
+    return (len(plain.split()) <= 12 or bool(_DEFINITION.search(plain))
+            or bool(_COVER.search(plain)))
 
 
 def _call(api_key: str, model: str, prompt: str) -> tuple[dict, dict]:

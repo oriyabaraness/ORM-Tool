@@ -88,7 +88,7 @@ a.lib-card em {margin-top: auto; font-style: normal; font-size: 12px; color: #88
   padding: 10px 12px 12px; margin: 0 0 10px;}
 .ws-review ul {margin: 8px 0 4px; padding-left: 18px;}
 .ws-review li {margin: 0 0 8px; color: var(--ink); font-size: 13px; line-height: 1.45;}
-.ws-review li:last-child {color: var(--ink-2);}
+.ws-review ul.ws-notes li:last-child {color: var(--ink-2);}
 .ws-brief {margin: 6px 0 22px; padding-top: 4px; border-top: 1px solid var(--line);}
 .ws-kicker {font-size: 13px; font-weight: 600; letter-spacing: -0.02em;
   color: var(--ink); margin: 16px 0 6px;}
@@ -128,7 +128,9 @@ div[class*="st-key-ws_clause_"] button {justify-content: flex-start; text-align:
 div[class*="st-key-ws_clause_"] button p {font-size: 13px !important; text-align: left;}
 div[class*="st-key-ws_clause_"] button:hover {background: var(--subtle) !important;}
 div[class*="st-key-ws_clause_"] button[kind="primary"] {background: var(--subtle) !important;
-  box-shadow: inset 3px 0 0 var(--primary);}
+  box-shadow: inset 3px 0 0 var(--primary); color: var(--ink) !important;
+  font-weight: 500 !important;}
+div[class*="st-key-ws_clause_"] button[kind="primary"] p {color: var(--ink) !important;}
 </style>
 """
 
@@ -241,7 +243,7 @@ def _take_library_query() -> None:
     """A category card opens Compare already scoped to that country and category."""
     country = _query_value("country")
     category = _query_value("category")
-    if country not in J and category not in taxonomy.BY_ID:
+    if country is None and category is None:
         return
     if country in J:
         st.session_state["scope_country"] = country
@@ -493,7 +495,7 @@ def _review_card(notes: dict, home_row, other_row=None) -> str:
     cites = _cite(home_row)
     if other_row is not None:
         cites += _cite(other_row)
-    return f'<div class="ws-review">{pill(label, kind)}<ul>{items}</ul>{cites}</div>'
+    return f'<div class="ws-review">{pill(label, kind)}<ul class="ws-notes">{items}</ul>{cites}</div>'
 
 
 _AI_PILL = {
@@ -557,8 +559,9 @@ def render_clause_explorer(conn, country: str, document_id: str | None,
             "another risk area above."),
             unsafe_allow_html=True)
         return
+    query_key = f"ws_clause_query_{document_id}"
     rows = queries.directive_clauses(conn, document_id,
-                                     query=st.session_state.get("ws_clause_query", ""))
+                                     query=st.session_state.get(query_key, ""))
     text_counts = {j: queries.category_counts(conn, j) for j in others}
 
     def has_text(j: str, cats: list[str]) -> bool:
@@ -569,12 +572,12 @@ def render_clause_explorer(conn, country: str, document_id: str | None,
         st.markdown(pane_head(f"{NAMES[country]} clauses", country=country,
                               count=_plural(len(rows), "clause")),
                     unsafe_allow_html=True)
-        st.text_input("Filter clauses", "", key="ws_clause_query",
+        st.text_input("Filter clauses", "", key=query_key,
                       placeholder="e.g. notify, exit strategy, 24 hours",
                       label_visibility="collapsed")
         if rows.empty:
             msg = ("No clauses match this filter."
-                   if st.session_state.get("ws_clause_query", "").strip()
+                   if st.session_state.get(query_key, "").strip()
                    else "This directive has no indexed clauses.")
             st.markdown(notice(msg), unsafe_allow_html=True)
             return
@@ -583,8 +586,9 @@ def render_clause_explorer(conn, country: str, document_id: str | None,
         key = f"ws_selected_{country}_{document_id}"
         if st.session_state.get(key) not in ids:
             tagged = rows[rows["categories"].str.contains(home_category, regex=False)]
-            st.session_state[key] = int((tagged if not tagged.empty else rows)
-                                        .iloc[0]["provision_id"])
+            duties = tagged[~tagged["text"].map(llm_review.is_not_a_requirement)]
+            first = duties if not duties.empty else tagged if not tagged.empty else rows
+            st.session_state[key] = int(first.iloc[0]["provision_id"])
         selected_id = st.session_state[key]
         with st.container(height=640, border=False):
             for _, c in rows.iterrows():
