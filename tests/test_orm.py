@@ -16,7 +16,7 @@ import pytest
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from orm import classify, db, extract, pipeline, queries, sources, taxonomy  # noqa: E402
+from orm import classify, db, extract, match, pipeline, queries, sources, taxonomy  # noqa: E402
 
 IL_TEXT = """
 Business Continuity Test Directive
@@ -981,6 +981,52 @@ def test_ai_review_table_of_contents_is_not_a_requirement(monkeypatch):
     assert not llm_review.is_not_a_requirement(_HOME)
     assert llm_review.verify({"status": "aligned", "headline": "Same."},
                              _HOME, "Article (1) Scope")["status"] == "not_a_requirement"
+
+
+_IL_COVER = ("Supervisor of Banks: Proper Conduct of Banking Business [28] (1/22) Board of "
+             "Directors Page 301- 1 ONLY THE HEBREW VERSION IS BINDING BOARD OF DIRECTORS "
+             "Table of Contents")
+_JO_CONTENTS = ("Article (3): Scope of Application " + "." * 80 + " 5 Article (4): Board "
+                "of Directors Composition" + "." * 60 + " 5")
+
+
+def test_contents_and_cover_pages_are_not_requirements_but_footers_are_ignored():
+    assert match.is_not_a_requirement(_IL_COVER)
+    assert match.is_not_a_requirement(_JO_CONTENTS)
+    long_rule = ("114. The effects of CRM will not be double counted. Therefore, no "
+                 "additional supervisory recognition of CRM for regulatory capital "
+                 "purposes will be granted on claims for which an issue-specific rating "
+                 "is used that already reflects that CRM. As stated in Paragraph 100, "
+                 "principal-only ratings will also not be allowed within the framework "
+                 "of CRM. Supervisor of Banks: Proper Conduct of Banking Business "
+                 "Page 203 - 27 ONLY THE HEBREW VERSION IS BINDING")
+    assert not match.is_not_a_requirement(long_rule)
+    footnote = ("91. Where a banking corporation has no exposure to a small business "
+                "customer, it may include such a deposit in this category provided that "
+                "the total funding raised from the customer is less than NIS 5 million. "
+                "41 “Aggregated funding” means the gross amount of all forms of funding.")
+    assert not match.is_not_a_requirement(footnote)
+
+
+def test_contents_pages_are_never_matched(built_db):
+    with db.session(built_db) as conn:
+        tagged = conn.execute(
+            "SELECT pc.category_id, d.id AS doc, d.jurisdiction FROM provision_category pc "
+            "JOIN provision p ON p.id = pc.provision_id "
+            "JOIN document d ON d.id = p.document_id").fetchall()
+        category = tagged[0]["category_id"]
+        junk = []
+        for doc, text in (("IL-TEST-1", _IL_COVER), ("JO-TEST-1", _JO_CONTENTS)):
+            cur = conn.execute("INSERT INTO provision(document_id, seq, ref, text) "
+                               "VALUES (?, 999, '', ?)", (doc, text))
+            conn.execute("INSERT INTO provision_category(provision_id, category_id, score) "
+                         "VALUES (?, ?, 1)", (cur.lastrowid, category))
+            junk.append(cur.lastrowid)
+        assert match.compute_matches(conn) > 0
+        paired = conn.execute(
+            f"SELECT COUNT(*) FROM provision_match WHERE provision_id IN ({junk[0]}, {junk[1]})"
+            f" OR match_id IN ({junk[0]}, {junk[1]})").fetchone()[0]
+        assert paired == 0
 
 
 def test_ai_review_card_shows_model_text_as_plain_text(monkeypatch):

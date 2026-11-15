@@ -65,7 +65,7 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
   -webkit-font-feature-settings: "liga" !important;
   overflow: hidden !important;
 }
-[data-testid="stHeader"] {background: transparent;}
+[data-testid="stHeader"] {background: rgba(246,249,252,.92); backdrop-filter: blur(6px);}
 [data-testid="stMainBlockContainer"], .block-container {
   padding-top: 2rem; padding-bottom: 3.5rem; max-width: 100%;
 }
@@ -111,10 +111,28 @@ code {font-size: 12.5px; background: var(--subtle); color: var(--ink); padding: 
 [data-testid="stWidgetLabel"] p, [data-testid="stWidgetLabel"] label {
   font-size: 12px !important; font-weight: 500; color: var(--ink-2);
 }
-div[data-baseweb="select"] > div, div[data-baseweb="input"], .stTextInput input,
-.stTextArea textarea {
-  border-radius: 8px !important; border-color: var(--line) !important;
-  background: var(--surface) !important; font-size: 14px;
+div[data-baseweb="select"] > div, div[data-baseweb="input"], div[data-baseweb="textarea"] {
+  border: 1px solid var(--line) !important; border-radius: 8px !important;
+  background: var(--surface) !important; font-size: 14px; box-shadow: none !important;
+}
+div[data-baseweb="input"] > div, div[data-baseweb="base-input"], .stTextInput input,
+.stTextArea textarea, .stNumberInput input {
+  border: 0 !important; background: transparent !important; box-shadow: none !important;
+}
+div[data-baseweb="select"] > div:hover, div[data-baseweb="input"]:hover,
+div[data-baseweb="textarea"]:hover {border-color: #c9d2dc !important;}
+div[data-baseweb="select"] > div:focus-within, div[data-baseweb="input"]:focus-within,
+div[data-baseweb="textarea"]:focus-within {
+  border-color: var(--focus) !important; box-shadow: 0 0 0 3px rgba(99,91,255,.16) !important;
+}
+span[data-baseweb="tag"] {
+  background: var(--subtle) !important; border: 1px solid var(--line) !important;
+  border-radius: 6px !important; color: var(--ink) !important; font-size: 13px;
+}
+span[data-baseweb="tag"] span, span[data-baseweb="tag"] svg {color: var(--ink-2) !important;}
+.stButton button:focus-visible, .stDownloadButton button:focus-visible,
+[data-testid="stSidebarNavLink"]:focus-visible, a:focus-visible {
+  outline: 2px solid var(--focus) !important; outline-offset: 2px;
 }
 .stButton button, .stDownloadButton button, [data-testid="stPopover"] button {
   border-radius: 8px; font-size: 13.5px; font-weight: 500; box-shadow: none;
@@ -215,7 +233,11 @@ mark {background: var(--highlight); color: inherit; padding: 0 1px; border-radiu
 @media (max-width: 640px) {
   [data-testid="stMainBlockContainer"], .block-container {padding-left: 16px; padding-right: 16px;}
   .page-head {flex-direction: column; align-items: flex-start;}
+  .page-title {font-size: 24px;}
   .boi-compare-grid {grid-template-columns: 1fr;}
+  .stButton button, .stDownloadButton button {min-height: 40px;}
+  [data-baseweb="tab-list"] {gap: 14px; overflow-x: auto;}
+  [data-testid="stDataFrame"], [data-testid="stTable"] {overflow-x: auto;}
 }
 </style>
 """

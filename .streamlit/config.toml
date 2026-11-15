@@ -1,0 +1,12 @@
+# Widget colours that CSS cannot reach (focus rings, tags, toggles, sliders).
+# Keep in sync with the tokens in ui_theme.py.
+[theme]
+base = "light"
+primaryColor = "#635bff"
+backgroundColor = "#f6f9fc"
+secondaryBackgroundColor = "#f6f9fc"
+textColor = "#0a2540"
+linkColor = "#635bff"
+borderColor = "#e3e8ee"
+showWidgetBorder = true
+baseRadius = "8px"

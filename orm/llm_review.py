@@ -68,12 +68,7 @@ Rules:
 {other_text}
 """
 
-_DUTY = re.compile(
-    r"\b(?:shall|must|should|required|requires|is expected|are expected|"
-    r"may not|prohibited|ensure)\b", re.I)
-_PAGE_REF = re.compile(r"\b\d{1,4}\s*[-–]\s*\d{1,3}\b|\.{4,}")
-_COVER = re.compile(r"\btable of contents\b|\bonly the hebrew version is binding\b", re.I)
-_DEFINITION = re.compile(r"^\W*(?:\d+[.)]\s*)?definitions?\b|\"[^\"]{2,60}\"\s+means\b", re.I)
+is_not_a_requirement = match.is_not_a_requirement
 _INVENTED = re.compile(
     r"\b(?:penalt\w*|fines?|fined|costs?|costly|severity|severe)\b", re.I)
 
@@ -85,17 +80,6 @@ def review_key(home_text: str, other_text: str | None) -> str:
 
 def cache_path(home_id: int, other_id: int | None) -> str:
     return os.path.join(CACHE_DIR, f"{home_id}__{other_id if other_id else 'none'}.json")
-
-
-def is_not_a_requirement(text: str) -> bool:
-    """Headings, tables of contents, definitions and scope lines."""
-    plain = re.sub(r"\s+", " ", text or "").strip()
-    if len(_PAGE_REF.findall(plain)) >= 3:
-        return True
-    if _DUTY.search(plain):
-        return False
-    return (len(plain.split()) <= 12 or bool(_DEFINITION.search(plain))
-            or bool(_COVER.search(plain)))
 
 
 def _call(api_key: str, model: str, prompt: str) -> tuple[dict, dict]:

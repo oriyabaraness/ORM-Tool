@@ -132,6 +132,22 @@ div[class*="st-key-ws_clause_"] button[kind="primary"] {background: var(--subtle
   box-shadow: inset 3px 0 0 var(--primary); color: var(--ink) !important;
   font-weight: 500 !important;}
 div[class*="st-key-ws_clause_"] button[kind="primary"] p {color: var(--ink) !important;}
+.st-key-ws_cliplist {height: auto !important; max-height: 640px; flex: 0 0 auto !important;}
+[data-testid="stLayoutWrapper"]:has(> .st-key-ws_cliplist) {height: auto !important;
+  flex: 0 0 auto !important;}
+@media (max-width: 640px) {
+  .st-key-ws_cliplist {max-height: 45vh;}
+  .st-key-ws_fulldoc {height: auto !important; max-height: 70vh; flex: 0 0 auto !important;}
+  [data-testid="stLayoutWrapper"]:has(> .st-key-ws_fulldoc) {height: auto !important;
+    flex: 0 0 auto !important;}
+  div[class*="st-key-ws_actions_"] [data-testid="stHorizontalBlock"] {flex-wrap: nowrap; gap: 8px;}
+  div[class*="st-key-ws_actions_"] [data-testid="stColumn"] {min-width: 0 !important; flex: 1 1 0 !important;}
+  div[class*="st-key-ws_actions_"] [data-testid="stColumn"]:last-child {display: none;}
+  .ws-status {gap: 4px 14px;}
+  .ws-table {display: block; overflow-x: auto;}
+  .ws-table th, .ws-table td {padding: 7px 8px;}
+  .ws-match .ws-scroll {max-height: 220px;}
+}
 </style>
 """
 
@@ -592,7 +608,8 @@ def _match_card(m, clause, selected_id: int) -> None:
         unsafe_allow_html=True)
     key = f"ws_match_{selected_id}_{int(m['provision_id'])}"
     choices = [("Undo", 0)] if decision else [("Confirm", 1), ("Reject", -1)]
-    cols = st.columns(len(choices) + 1)
+    with st.container(key=f"ws_actions_{key}"):
+        cols = st.columns(len(choices) + 1)
     for col, (text, value) in zip(cols, choices):
         with col:
             if st.button(text, key=f"{key}_{value}", width="stretch"):
@@ -659,12 +676,14 @@ def render_clause_explorer(conn, country: str, document_id: str | None,
             first = duties if not duties.empty else tagged if not tagged.empty else rows
             st.session_state[key] = int(first.iloc[0]["provision_id"])
         selected_id = st.session_state[key]
-        with st.container(height=640, border=False):
+        with st.container(height=640, border=False, key="ws_cliplist"):
             for _, c in rows.iterrows():
                 pid = int(c["provision_id"])
                 cats = _clause_categories(c)
                 n = int(c["matches"])
-                if n:
+                if llm_review.is_not_a_requirement(c["text"]):
+                    state = "contents or heading, not compared"
+                elif n:
                     state = _plural(n, "equivalent")
                 elif not cats:
                     state = "not tagged"
@@ -685,6 +704,10 @@ def render_clause_explorer(conn, country: str, document_id: str | None,
     category_id = (home_category if home_category in clause_cats
                    else clause_cats[0] if clause_cats else home_category)
     other_has_text = {j: has_text(j, clause_cats) for j in others}
+    heading = llm_review.is_not_a_requirement(clause["text"])
+    not_compared = notice(
+        "<b>Not compared.</b> This is a cover page, table of contents, heading or "
+        "definition, not a requirement. Pick an article from the list to compare it.")
     with mid:
         st.markdown(pane_head("Selected clause"), unsafe_allow_html=True)
         attrs = queries.provision_attributes(conn, [selected_id]).get(selected_id, {})
@@ -718,6 +741,9 @@ def render_clause_explorer(conn, country: str, document_id: str | None,
             st.markdown(pane_head(f"Equivalent in {NAMES[j]}", country=j,
                                   count=_plural(len(mj), "suggestion") if len(mj) else ""),
                         unsafe_allow_html=True)
+            if heading:
+                st.markdown(not_compared, unsafe_allow_html=True)
+                continue
             if mj.empty:
                 if not clause_cats:
                     msg = ("<b>Not assessed.</b> This clause has no risk-category tag, "
@@ -767,6 +793,9 @@ def render_clause_explorer(conn, country: str, document_id: str | None,
                    "and the stricter clause does not satisfy the other jurisdiction.")
         for j in others:
             st.markdown(pane_head(NAMES[j], country=j), unsafe_allow_html=True)
+            if heading:
+                st.markdown(not_compared, unsafe_allow_html=True)
+                continue
             mj = matches[matches["jurisdiction"] == j]
             if not mj.empty:
                 mj = mj[mj["_decision"] != -1]
@@ -891,7 +920,7 @@ def render_full_directive(conn, country: str, category_id: str,
             f'<div class="ws-read{" tagged" if in_cat else ""}">'
             f'<div class="law"><span class="ref">{_e(p["ref"] or "¶")}</span>'
             f'{_highlight(p["text"], terms)}</div><div>{chips}</div></div>')
-    with st.container(height=720, border=False):
+    with st.container(height=720, border=False, key="ws_fulldoc"):
         st.markdown("".join(blocks) or notice("No clauses."), unsafe_allow_html=True)
 
 

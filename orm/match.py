@@ -92,6 +92,37 @@ MIN_SCORE = 0.06
 SAME_CLAUSE_SIMILARITY = 0.25
 
 
+_DUTY = re.compile(
+    r"\b(?:shall|must|should|required|requires|is expected|are expected|"
+    r"may not|prohibited|ensure)\b", re.I)
+# Directive page numbers ("301-18", "301- 2") and dot leaders; not section
+# ranges ("3.8–3.9", "Sections 112–115") or figures in tables.
+_PAGE_REF = re.compile(r"(?<![\d.])\d{3}- ?\d{1,3}\b(?![.\d])|\.{4,}")
+_COVER = re.compile(r"\btable of contents\b|\blist of contents\b|"
+                    r"\bonly the hebrew version is binding\b", re.I)
+_DEFINITION = re.compile(r"^\W*(?:\d+[.)]\s*)?(?:(?:Definitions?|DEFINITIONS?)\b|"
+                         r"[\"“][^\"”]{2,60}[\"”]\s+means\b)")
+# A contents page is mostly page numbers and dot leaders; running footers and
+# paragraph ranges inside real text are far sparser than one per dozen words.
+WORDS_PER_PAGE_REF = 15
+# The Hebrew-version notice is also a running footer, so it marks a cover page
+# only when there is little else on the page.
+COVER_MAX_WORDS = 40
+
+
+def is_not_a_requirement(text: str) -> bool:
+    """Headings, tables of contents, cover pages, definitions and scope lines."""
+    plain = re.sub(r"\s+", " ", text or "").strip()
+    words = len(plain.split())
+    refs = len(_PAGE_REF.findall(plain))
+    if refs >= 2 and refs * WORDS_PER_PAGE_REF >= words:
+        return True
+    if _DUTY.search(plain):
+        return False
+    return (words <= 12 or bool(_DEFINITION.search(plain))
+            or (words <= COVER_MAX_WORDS and bool(_COVER.search(plain))))
+
+
 def same_clause(text_similarity: float) -> bool:
     """True when two clauses are close enough in wording to compare."""
     return float(text_similarity or 0) >= SAME_CLAUSE_SIMILARITY
@@ -110,6 +141,7 @@ def compute_matches(conn: sqlite3.Connection, top_n: int = 5) -> int:
     vec = Vectorizer([r["text"] for r in rows])
     vectors = dict(zip(ids, vec.vectors()))
     jurisdiction = {r["id"]: r["jurisdiction"] for r in rows}
+    not_requirements = {r["id"] for r in rows if is_not_a_requirement(r["text"])}
 
     expectations: dict[int, set[str]] = defaultdict(set)
     for r in conn.execute("SELECT provision_id, expectation_id FROM expectation_hit"):
@@ -118,7 +150,8 @@ def compute_matches(conn: sqlite3.Connection, top_n: int = 5) -> int:
     by_category: dict[str, list[int]] = defaultdict(list)
     for r in conn.execute("SELECT provision_id, category_id FROM provision_category "
                           "WHERE reviewed >= 0"):
-        by_category[r["category_id"]].append(r["provision_id"])
+        if r["provision_id"] not in not_requirements:
+            by_category[r["category_id"]].append(r["provision_id"])
 
     written = 0
     for category_id, pids in by_category.items():

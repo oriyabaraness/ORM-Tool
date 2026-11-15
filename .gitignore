@@ -6,7 +6,8 @@ __pycache__/
 *.pid
 *.local.csv
 boi_texts/*.txt.gz
-.streamlit/
+.streamlit/*
+!.streamlit/config.toml
 
 # Risk Compare index (rebuilt from the CSV indexes and orm_texts/)
 # orm_texts/ IS committed: it is the extracted regulation text the live
