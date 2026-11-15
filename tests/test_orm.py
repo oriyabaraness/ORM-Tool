@@ -854,3 +854,112 @@ def test_obligation_table_cells_are_filled(built_db, tmp_path, monkeypatch):
     table = tables[0]
     assert not table["action"].isna().any() and not table["status"].isna().any()
     assert table["action"].str.len().min() > 5
+
+
+# --- AI review of a clause pair ---------------------------------------------
+
+_HOME = ("The board of directors shall approve the business continuity plan and "
+         "review it at least once a year.")
+_OTHER = ("Banks shall maintain a business continuity plan covering critical "
+          "operations and shall review the plan annually.")
+
+
+def _fake_model(answer, calls=None):
+    def call(api_key, model, prompt):
+        if calls is not None:
+            calls.append(prompt)
+        return answer, {"input_tokens": 900, "output_tokens": 300}
+    return call
+
+
+def test_ai_review_drops_points_whose_quote_is_made_up(monkeypatch):
+    from orm import llm_review
+    answer = {
+        "status": "differs",
+        "headline": "Israel names the board as approver; Jordan does not. "
+                    "Breaches carry a heavy penalty.",
+        "points": [
+            {"text": "Israel: the board must approve the plan.",
+             "quotes": [{"from": "home", "text": "The board of directors shall "
+                                                 "approve the business continuity plan"}]},
+            {"text": "Jordan requires a yearly external audit.",
+             "quotes": [{"from": "other", "text": "Banks shall commission an external "
+                                                  "audit of the plan every year."}]},
+            {"text": "Quoted from the wrong clause.",
+             "quotes": [{"from": "other", "text": "The board of directors shall "
+                                                  "approve the business continuity plan"}]},
+            {"text": "No quote at all.", "quotes": []},
+        ],
+        "so_what": "One annual review could serve both, approved by the board.",
+        "check_internally": ["Who approves the plan today?", "When was it last reviewed?",
+                             "A third question is cut."],
+    }
+    monkeypatch.setattr(llm_review, "_call", _fake_model(answer))
+    result, usage = llm_review.analyse("Israel", _HOME, "Jordan", _OTHER, api_key="x")
+    assert result["status"] == "differs"
+    assert [p["text"] for p in result["points"]] == ["Israel: the board must approve the plan."]
+    assert "penalty" not in result["headline"]
+    assert result["headline"].startswith("Israel names the board")
+    assert len(result["check_internally"]) == 2
+    assert usage["input_tokens"] == 900
+
+
+def test_ai_review_table_of_contents_is_not_a_requirement(monkeypatch):
+    from orm import llm_review
+    calls: list[str] = []
+    monkeypatch.setattr(llm_review, "_call", _fake_model(
+        {"status": "differs", "headline": "Both differ.", "points": []}, calls))
+    toc = ("Chapter 1 General 1. Introduction 411-3 2. Applicability 411-4 "
+           "3. Definitions 411-4 Chapter B Corporate governance 411-6")
+    result, _ = llm_review.analyse("Israel", toc, "Jordan", _OTHER, api_key="x")
+    assert result["status"] == "not_a_requirement"
+    assert result["points"] == []
+    assert calls == []                    # no paid call for a contents line
+    assert llm_review.verify({"status": "aligned", "headline": "Same."},
+                             _HOME, "Article (1) Scope")["status"] == "not_a_requirement"
+
+
+def test_ai_review_is_saved_offline_and_shown_on_compare(built_db, tmp_path, monkeypatch):
+    from orm import llm_review
+    monkeypatch.setattr(llm_review, "CACHE_DIR", str(tmp_path / "llm_reviews"))
+    answer = {
+        "status": "differs",
+        "headline": "Israel puts plan approval on the board; Jordan only asks for a plan.",
+        "points": [{"text": "Israel: the board approves the plan.",
+                    "quotes": [{"from": "home", "text": "The board of directors shall "
+                                                        "approve the business continuity plan"}]}],
+        "so_what": "Check that one board-approved plan meets both texts.",
+        "check_internally": ["Does the board minute its approval?"],
+    }
+    monkeypatch.setattr(llm_review, "_call", _fake_model(answer))
+    with db.session(built_db) as conn:
+        found = llm_review.pairs(conn, "IL-TEST-1")
+        assert found and {p["other"] for p in found} == {"JO"}
+        stats = llm_review.review_document(conn, "IL-TEST-1", {"IL": "Israel", "JO": "Jordan"},
+                                           api_key="x", log=lambda *_: None)
+        assert stats["analysed"] == len(found)
+        again = llm_review.review_document(conn, "IL-TEST-1", {}, api_key="x",
+                                           log=lambda *_: None)
+        assert again["analysed"] == 0 and again["cached"] == len(found)
+    first = found[0]
+    name = f"{first['home_id']}__{first['other_id'] or 'none'}.json"
+    assert (tmp_path / "llm_reviews" / name).exists()
+    assert llm_review.load(first["home_text"], first["other_text"]) is not None
+    assert llm_review.load(first["home_text"] + " Amended.", first["other_text"]) is None
+
+    rendered: list[str] = []
+    monkeypatch.setitem(sys.modules, "streamlit", _fake_streamlit(rendered))
+    sys.modules.pop("orm_compare", None)
+    sys.modules.pop("ui_theme", None)
+    orm_compare = importlib.import_module("orm_compare")
+    bcp = next(p for p in found if "approve the business continuity plan" in p["home_text"])
+    state = sys.modules["streamlit"].session_state
+    state["scope_category"] = "op_resilience"
+    state["ws_selected_IL_IL-TEST-1"] = bcp["home_id"]
+    orm_compare.render_risk_compare_section(built_db)
+    page = "\n".join(rendered)
+    assert "AI analysis, check before relying on it" in page
+    assert "Israel puts plan approval on the board" in page
+    assert "“The board of directors shall approve the business continuity plan” · Israel" in page
+    assert "<b>So what:</b>" in page and "Check internally" in page
+    assert "Bank of Israel · <b>Directive 999" in page

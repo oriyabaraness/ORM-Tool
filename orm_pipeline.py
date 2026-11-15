@@ -12,6 +12,11 @@ Usage:
   ANTHROPIC_API_KEY=... python orm_pipeline.py obligations --llm --document IL-BOI-PC-310
                                           # have Claude read one directive (cached
                                           # in orm_texts/llm/, commit it to deploy)
+  python orm_pipeline.py reviews --document IL-BOI-PC-301
+                                          # count the clause pairs Claude would compare
+  ANTHROPIC_API_KEY=... python orm_pipeline.py reviews --llm --document IL-BOI-PC-301
+                                          # AI analysis for the Compare review column
+                                          # (cached in orm_texts/llm_reviews/)
 
 Jordan: most CBJ entries have no direct PDF link in the index. Either run
 `python jordan_cbj_index.py` first (it tries to scrape PDF links), or save a
@@ -45,6 +50,36 @@ def cmd_status(args):
                 print(f"  {r['id']}  —  {r['title'][:80]}")
 
 
+NAMES = {"IL": "Israel", "JO": "Jordan", "TR": "Turkey"}
+
+
+def cmd_reviews(args):
+    from orm import llm_review
+    with db.session(args.db) as conn:
+        db.init(conn)
+        for doc_id in args.document:
+            if not args.llm:
+                found = llm_review.pairs(conn, doc_id)
+                todo = [p for p in found
+                        if llm_review.load(p["home_text"], p["other_text"]) is None]
+                chars = sum(len(llm_review.PROMPT)
+                            + min(len(p["home_text"]), llm_review.MAX_CLAUSE_CHARS)
+                            + min(len(p["other_text"] or ""), llm_review.MAX_CLAUSE_CHARS)
+                            for p in todo
+                            if not llm_review.is_not_a_requirement(p["home_text"]))
+                print(f"{doc_id}: {len(found)} clause pairs, "
+                      f"{len(found) - len(todo)} already analysed. About {chars // 4:,} "
+                      f"input tokens to send for the other {len(todo)}. "
+                      "Add --llm to analyse them.")
+                continue
+            stats = llm_review.review_document(conn, doc_id, NAMES, limit=args.limit,
+                                               force=args.force, log=print)
+            print(f"{doc_id}: {stats['pairs']} pairs · {stats['analysed']} analysed now · "
+                  f"{stats['cached']} already saved · {stats['skipped']} left for later. "
+                  f"Tokens used: {stats['input_tokens']:,} in, "
+                  f"{stats['output_tokens']:,} out. Saved in {llm_review.CACHE_DIR}")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -71,6 +106,16 @@ def main():
     o.add_argument("--document", action="append", default=[],
                    help="document id, e.g. IL-BOI-PC-310 (repeatable)")
 
+    r = sub.add_parser("reviews", help="AI analysis of each clause and its "
+                                       "equivalent for the Compare review column")
+    r.add_argument("--llm", action="store_true",
+                   help="call Claude (needs ANTHROPIC_API_KEY); without it, only "
+                        "count the pairs and how many are already saved")
+    r.add_argument("--document", action="append", default=[], required=True,
+                   help="document id, e.g. IL-BOI-PC-301 (repeatable)")
+    r.add_argument("--limit", type=int, help="analyse at most this many new pairs")
+    r.add_argument("--force", action="store_true", help="re-analyse saved pairs too")
+
     args = ap.parse_args()
     if args.cmd == "build":
         pipeline.build(args.db, fetch=args.fetch,
@@ -92,6 +137,8 @@ def main():
                     print(f"{doc_id}: {n} obligations saved to "
                           f"{obligations.llm_cache_path(doc_id)}")
             print(f"obligations: {obligations.build_all(conn)}")
+    elif args.cmd == "reviews":
+        cmd_reviews(args)
     elif args.cmd == "update":
         report = update.update(args.db, log=print)
         print("\n" + report.to_text())

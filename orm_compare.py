@@ -15,7 +15,7 @@ import re
 import pandas as pd
 import streamlit as st
 
-from orm import classify, db, match, pipeline, queries, review, taxonomy
+from orm import classify, db, llm_review, match, pipeline, queries, review, taxonomy
 from ui_theme import (APP_NAME, COUNTRY_ACCENT, citation, e as _e, notice,
                       page_header, pane_head, pill)
 
@@ -496,6 +496,44 @@ def _review_card(notes: dict, home_row, other_row=None) -> str:
     return f'<div class="ws-review">{pill(label, kind)}<ul>{items}</ul>{cites}</div>'
 
 
+_AI_PILL = {
+    "aligned": ("Aligned", "found"),
+    "differs": ("Differs", "partial"),
+    "no_equivalent": ("No equivalent", "partial"),
+    "not_a_requirement": ("Not a requirement", "not-assessed"),
+}
+
+
+def _ai_review_card(ai: dict, home_name: str, other_name: str,
+                    home_row, other_row=None) -> str:
+    label, kind = _AI_PILL[ai["status"]]
+    side = {"home": home_name, "other": other_name}
+    points = "".join(
+        f"<li>{_e(p['text'])}"
+        + "".join(f'<div class="ws-why">“{_e(q["text"])}” · {_e(side[q["from"]])}</div>'
+                  for q in p["quotes"])
+        + "</li>"
+        for p in ai["points"])
+    body = f'<div class="ws-kicker">{_e(ai["headline"])}</div>'
+    if points:
+        body += f"<ul>{points}</ul>"
+    if ai["so_what"]:
+        body += f'<div class="ws-why"><b>So what:</b> {_e(ai["so_what"])}</div>'
+    if ai["check_internally"]:
+        body += ('<div class="ws-why"><b>Check internally</b></div><ul>'
+                 + "".join(f"<li>{_e(q)}</li>" for q in ai["check_internally"])
+                 + "</ul>")
+    if ai["status"] in {"differs", "no_equivalent"}:
+        body += ('<div class="ws-why">A difference in the text is not a '
+                 "compliance gap.</div>")
+    cites = _cite(home_row)
+    if other_row is not None:
+        cites += _cite(other_row)
+    return (f'<div class="ws-review">{pill(label, kind)} '
+            f'<span class="ws-why">AI analysis, check before relying on it</span>'
+            f'{body}{cites}</div>')
+
+
 def _same_clause_matches(frame):
     """Drop suggestions whose wording is not the same requirement."""
     if frame.empty:
@@ -685,9 +723,15 @@ def render_clause_explorer(conn, country: str, document_id: str | None,
                 other_ref=(" ".join(p for p in (_val(other_row, "doc_ref"),
                                                _val(other_row, "ref")) if p)
                            if other_row is not None else ""))
-            notes = {"status": brief["status"],
-                     "points": [item["text"] for item in brief["executive"]]}
-            st.markdown(_review_card(notes, clause, other_row), unsafe_allow_html=True)
+            ai = (llm_review.load(clause["text"], other_text)
+                  if brief["status"] != "not_assessed" else None)
+            if ai:
+                st.markdown(_ai_review_card(ai, NAMES[country], NAMES[j], clause, other_row),
+                            unsafe_allow_html=True)
+            else:
+                notes = {"status": brief["status"],
+                         "points": [item["text"] for item in brief["executive"]]}
+                st.markdown(_review_card(notes, clause, other_row), unsafe_allow_html=True)
             if brief["status"] != "not_assessed":
                 briefs.append((NAMES[j], brief))
     for other_name, brief in briefs:
