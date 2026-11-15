@@ -269,7 +269,7 @@ def equivalents(conn: sqlite3.Connection, provision_id: int,
     a category, matches from every category the clause is tagged with."""
     df = _df(conn, """
         SELECT m.match_id AS provision_id, m.score, m.text_similarity,
-               m.shared_expectations, m.shared_terms,
+               m.shared_expectations, m.shared_terms, d.id AS document_id,
                d.jurisdiction, d.regulator, d.ref AS doc_ref, d.title AS doc_title,
                d.published, d.pdf_url, d.url, p.ref, p.text
         FROM provision_match m

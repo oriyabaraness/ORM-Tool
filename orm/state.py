@@ -12,14 +12,17 @@ state, so the store can answer "what did we have in place on 1 March?"
 
 Tables:
     obligation_review  okey -> status, edited wording, chosen control, reviewer
+    match_review       suggested clause match -> confirmed or rejected, reviewer
     bank_control       the bank's own controls, uploaded from Excel/CSV
     audit_log          every change: when, who, what, and the new state
 """
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import json
 import os
+import re
 import sqlite3
 from contextlib import contextmanager
 
@@ -37,6 +40,14 @@ CREATE TABLE IF NOT EXISTS obligation_review (
     action_edit  TEXT,                          -- reviewer's wording, if changed
     control_id   TEXT,                          -- chosen control ('' = needs new control)
     note         TEXT,
+    reviewer     TEXT,
+    reviewed_at  TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS match_review (
+    mkey         TEXT PRIMARY KEY,              -- see match_key
+    status       INTEGER NOT NULL,              -- 1 confirmed, -1 rejected
+    home_cite    TEXT,
+    other_cite   TEXT,
     reviewer     TEXT,
     reviewed_at  TEXT NOT NULL
 );
@@ -135,6 +146,48 @@ def reviews_as_of(conn, when: str) -> dict[str, dict]:
                                  "reviewer": d.get("reviewer", ""),
                                  "reviewed_at": r["ts"]}
     return state
+
+
+# --- suggested clause matches ---------------------------------------------------
+
+MATCH_LABEL = {1: "Confirmed", -1: "Rejected"}
+
+
+def match_key(home_document: str, home_text: str,
+              other_document: str, other_text: str) -> str:
+    """Stable across index rebuilds; a changed clause text needs a new decision."""
+    def side(doc: str, text: str) -> str:
+        words = re.sub(r"\W+", " ", (text or "").lower()).strip()
+        return f"{doc}#{hashlib.sha256(words.encode('utf-8')).hexdigest()[:16]}"
+    return f"{side(home_document, home_text)}|{side(other_document, other_text)}"
+
+
+def match_reviews(conn, keys) -> dict[str, dict]:
+    keys = list(keys)
+    if not keys:
+        return {}
+    marks = ",".join("?" * len(keys))
+    return {r["mkey"]: dict(r) for r in conn.execute(
+        f"SELECT * FROM match_review WHERE mkey IN ({marks})", keys)}
+
+
+def save_match_review(conn, mkey: str, *, status: int, reviewer: str,
+                      home_cite: str = "", other_cite: str = "",
+                      at: str | None = None) -> None:
+    """Confirm (1) or reject (-1) a suggested match; 0 clears the decision."""
+    at = at or now()
+    if status == 0:
+        conn.execute("DELETE FROM match_review WHERE mkey=?", (mkey,))
+    else:
+        conn.execute(
+            "INSERT INTO match_review(mkey, status, home_cite, other_cite, reviewer, "
+            "reviewed_at) VALUES (?,?,?,?,?,?) ON CONFLICT(mkey) DO UPDATE SET "
+            "status=excluded.status, reviewer=excluded.reviewer, "
+            "reviewed_at=excluded.reviewed_at",
+            (mkey, int(status), home_cite, other_cite, reviewer or "", at))
+    _log(conn, reviewer, "match_review", mkey,
+         {"status": int(status), "home": home_cite, "other": other_cite,
+          "reviewer": reviewer or "", "at": at})
 
 
 # --- the bank's own controls -----------------------------------------------------

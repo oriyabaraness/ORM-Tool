@@ -14,6 +14,10 @@ The earlier Sefaria-inspired "publication library" direction has been
 - "Browse the Library" headings, book shelves, library category grids
 - hero banners, marketing copy, decorative imagery or gradients
 
+Approved exception: the Home screen (country dropdown + one card per risk
+category, each opening Compare). Keep it; see "Approved exception: Home" in
+`DESIGN.md`.
+
 The product is a **regulatory risk comparison workspace** for compliance and
 risk teams. Its core flow is: country → risk category → click a clause → see
 the equivalent clauses from other countries beside it, with citations.

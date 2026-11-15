@@ -47,11 +47,18 @@ Everything below serves those three.
 
 ## Information architecture
 
+**Approved exception: Home.** The app opens on a Home screen: a country
+dropdown at the top and one card per risk category (clause count, or "No
+indexed text"). A card opens Compare scoped to that country and category.
+This is a way into the workflow, not a reading library: no shelves, no
+"Browse the Library", no Sefaria references, no hero or marketing copy.
+
 Primary navigation (left rail on desktop, in this order):
 
 | Item | Purpose |
 |---|---|
-| **Compare** (home) | The clause-comparison workspace. The default screen. |
+| **Home** | Country dropdown and risk-category cards (the approved exception above). The default screen. |
+| **Compare** | The clause-comparison workspace. |
 | **Coverage** | Countries × risk categories matrix: how much each country regulates each area. |
 | **Gaps** | Baseline expectations per category: found / not found / not assessed, per country. Exportable. |
 | **Deadlines** | Every extracted reporting deadline and review frequency, normalized and comparable. |
@@ -102,22 +109,25 @@ highlighted and scrolled into view. Used when someone clicks "Open in source".
 
 ### Color
 
+These are the values the app ships with (`ui_theme.py`). If the two ever
+disagree, change this table to match `ui_theme.py`.
+
 | Token | Value | Use |
 |---|---|---|
-| `--ink` | `#14171f` | Primary text |
-| `--ink-2` | `#4a5160` | Secondary text |
-| `--ink-3` | `#7b8292` | Metadata, captions |
-| `--line` | `#e3e5ea` | Dividers, borders |
+| `--ink` | `#0a2540` | Primary text |
+| `--ink-2` | `#425466` | Secondary text |
+| `--ink-3` | `#6b7c93` | Metadata, captions |
+| `--line` | `#e3e8ee` | Dividers, borders |
 | `--surface` | `#ffffff` | Panes, cards |
-| `--canvas` | `#f6f7f9` | App background |
-| `--subtle` | `#f0f2f5` | Hover, selected-row tint, inputs |
-| `--primary` | `#17345b` | Primary actions, selection, active nav |
-| `--primary-hover` | `#102845` | Hover on primary |
-| `--focus` | `#3b6fd8` | Keyboard focus ring |
-| `--found` | `#2f7a4a` on `#e8f3ec` | Found / strong match / confirmed |
-| `--partial` | `#9a6a00` on `#fbf2dc` | Partial match |
-| `--gap` | `#b3261e` on `#fbe9e7` | Not found / possible gap |
-| `--na` | `#7b8292` on `#f0f2f5` | Not assessed / no text |
+| `--canvas` | `#f6f9fc` | App background |
+| `--subtle` | `#f6f9fc` | Hover, selected-row tint, inputs |
+| `--primary` | `#635bff` | Primary actions, selection, active nav |
+| `--primary-hover` | `#0a2540` | Hover on primary |
+| `--focus` | `#635bff` | Keyboard focus ring |
+| `--found` | `#1f7a4d` on `#e7f6ee` | Found / strong match / confirmed |
+| `--partial` | `#9a6a00` on `#fbf6e8` | Partial match |
+| `--gap` | `#b3261e` on `#fdeceb` | Not found / possible gap |
+| `--na` | `#6b7c93` on `#f6f9fc` | Not assessed / no text / rejected |
 | `--highlight` | `#fff1b8` | Search and keyword highlights in text |
 
 Country accents (thin 3px rules and small dots only, never fills):
@@ -130,18 +140,18 @@ Dark mode: plan for it in tokens; not required for the Streamlit stage.
 
 | Role | Face | Size / line height | Weight |
 |---|---|---|---|
-| UI, labels, tables | Inter (fallback: system-ui) | 13–14px / 1.4 | 400, 500, 600 |
-| Screen titles | Inter | 20px / 1.3 | 600 |
-| Pane headers | Inter | 12px uppercase, +0.04em tracking | 600 |
+| UI, labels, tables | General Sans (fallback: system-ui) | 13–14px / 1.4 | 400, 500, 600 |
+| Screen titles | General Sans | 28px / 1.15 | 500 |
+| Pane headers | General Sans | 13px, sentence case, −0.02em tracking | 600 |
 | Regulation text | Source Serif 4 (fallback: Georgia) | 15–16px / 1.65 | 400 |
-| Citations, refs | Inter, tabular numbers | 12–13px | 500 |
+| Citations, refs | General Sans, tabular numbers | 12–13px | 500 |
 
 Use tabular numerals anywhere numbers line up (counts, dates, hours).
 
 ### Spacing and shape
 
 - 4px base unit; common steps 4 / 8 / 12 / 16 / 24 / 32.
-- Radius: 6px for panes and inputs, 4px for buttons, 999px for pills.
+- Radius: 10px for cards and panes, 8px for buttons and inputs, 999px for pills.
 - Borders: 1px `--line`. Shadows: none, except menus and popovers.
 - Max content width: none for Compare (it uses the full screen); 1200px for
   text-heavy screens like Gaps exports.
@@ -186,14 +196,24 @@ Use tabular numerals anywhere numbers line up (counts, dates, hours).
 
 ## Implementation status (Streamlit stage)
 
-Built: left rail (Compare, Coverage, Gaps, Deadlines, Changes · Sources, Market
-context), shared scope bar remembered across screens, three-pane Compare,
-honest-state notices, status pills, citation lines, serif regulation text,
-CSV exports for Coverage, Gaps and Deadlines. Tokens live in `ui_theme.py`.
+Built: left rail (Home, Compare, Coverage, Gaps, Deadlines, Changes ·
+Obligations, Controls, Audit readiness · Sources), shared scope bar remembered
+across screens, honest-state notices, status pills, citation lines, serif
+regulation text, CSV exports for Coverage, Gaps and Deadlines. Tokens live in
+`ui_theme.py`.
 
-Not yet (needs storage or the future stack): Confirm / Reject on suggested
-matches, arrow-key navigation in the clause list, clicking a Coverage cell to
-open Compare (today: pick country + category under the matrix), PDF export.
+Compare today: the scope bar is Country · Compare with · Risk area · "<risk
+area> directives" (only directives filed under that risk area). Four panes:
+the directive's clauses, the selected clause, equivalents, and an ORM review
+column. Suggested matches carry Confirm / Reject (recorded with the
+reviewer's name in `orm_state.db` and the audit log); rejected matches drop
+out of the review column. The review column shows a saved AI analysis when
+one exists ("AI analysis, check before relying on it"), otherwise the
+rule-based review.
+
+Not yet (needs the future stack): arrow-key navigation in the clause list,
+clicking a Coverage cell to open Compare (today: pick country + category under
+the matrix), PDF export of the comparison.
 
 ## Don't
 

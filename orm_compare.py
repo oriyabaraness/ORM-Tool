@@ -16,6 +16,7 @@ import pandas as pd
 import streamlit as st
 
 from orm import classify, db, llm_review, match, pipeline, queries, review, taxonomy
+from orm import state as orm_state
 from ui_theme import (APP_NAME, COUNTRY_ACCENT, citation, e as _e, notice,
                       page_header, pane_head, pill)
 
@@ -543,6 +544,74 @@ def _same_clause_matches(frame):
     return frame[frame["text_similarity"].map(match.same_clause)].reset_index(drop=True)
 
 
+def _with_decisions(frame, clause):
+    """Attach each suggestion's confirm / reject decision from the state store."""
+    frame = frame.copy()
+    if frame.empty:
+        frame["_mkey"] = []
+        frame["_decision"] = []
+        return frame
+    frame["_mkey"] = [orm_state.match_key(clause["document_id"], clause["text"],
+                                          m["document_id"], m["text"])
+                      for _, m in frame.iterrows()]
+    with orm_state.session() as s:
+        decided = orm_state.match_reviews(s, frame["_mkey"])
+    frame["_decision"] = [decided.get(k, {}).get("status", 0) for k in frame["_mkey"]]
+    frame["_reviewer"] = [decided.get(k, {}).get("reviewer", "") for k in frame["_mkey"]]
+    frame["_reviewed_at"] = [decided.get(k, {}).get("reviewed_at", "")[:10]
+                             for k in frame["_mkey"]]
+    return frame
+
+
+def _cite_text(row) -> str:
+    return " · ".join(p for p in (_val(row, "regulator"), _val(row, "doc_ref"),
+                                  _val(row, "ref")) if p)
+
+
+def _match_card(m, clause, selected_id: int) -> None:
+    strength = match.strength(m["score"])
+    width = max(6, min(100, int(m["score"] * 160)))
+    why = "".join(f'<span class="tag">✓ {_e(x)}</span>'
+                  for x in m["shared_expectation_labels"])
+    terms = (f'<div class="ws-why">Shared terms: {_e(m["shared_terms"])}</div>'
+             if m["shared_terms"] else "")
+    decision = int(m["_decision"])
+    if decision:
+        label = orm_state.MATCH_LABEL[decision]
+        who = f"By {m['_reviewer']}" if m["_reviewer"] else label
+        status = (f'{pill(label, "found" if decision == 1 else "not-assessed")} '
+                  f'{_e(who)} on {_e(m["_reviewed_at"])}')
+    else:
+        status = "Suggested match: confirm before relying on it."
+    st.markdown(
+        f'<div class="ws-match"><div class="top">'
+        f'{pill(strength, STRENGTH_KIND[strength])}'
+        f'<div class="bar"><span style="width:{width}%"></span></div></div>'
+        f'{_cite(m)}<div class="law ws-scroll">{_highlight(m["text"], [])}</div>'
+        f'<div>{why}</div>{terms}<div class="ws-why">{status}</div></div>',
+        unsafe_allow_html=True)
+    key = f"ws_match_{selected_id}_{int(m['provision_id'])}"
+    choices = [("Undo", 0)] if decision else [("Confirm", 1), ("Reject", -1)]
+    cols = st.columns(len(choices) + 1)
+    for col, (text, value) in zip(cols, choices):
+        with col:
+            if st.button(text, key=f"{key}_{value}", width="stretch"):
+                name = (st.session_state.get("ws_reviewer_name")
+                        or st.session_state.get("reviewer_name") or "").strip()
+                if value and not name:
+                    st.session_state["ws_match_error"] = key
+                else:
+                    with orm_state.session() as s:
+                        orm_state.save_match_review(
+                            s, m["_mkey"], status=value, reviewer=name,
+                            home_cite=_cite_text(clause), other_cite=_cite_text(m))
+                    st.session_state.pop("ws_match_error", None)
+                st.rerun()
+    if st.session_state.get("ws_match_error") == key:
+        st.markdown(notice("Enter your name above the matches first: every decision "
+                           "is recorded with who made it."), unsafe_allow_html=True)
+
+
 def _clause_categories(row) -> list[str]:
     return [c for c in str(row.get("categories") or "").split(",") if c in taxonomy.BY_ID]
 
@@ -634,9 +703,16 @@ def render_clause_explorer(conn, country: str, document_id: str | None,
             f'{_highlight(clause["text"], classify.matched_keywords(category_id, clause["text"]))}'
             f'</div><div>{areas}{tags}{checklist}</div></div>', unsafe_allow_html=True)
 
-    matches = _same_clause_matches(queries.equivalents(conn, selected_id))
+    matches = _with_decisions(_same_clause_matches(queries.equivalents(conn, selected_id)),
+                              clause)
     with right:
         showed_match = False
+        if not matches.empty:
+            if "ws_reviewer_name" not in st.session_state:
+                st.session_state["ws_reviewer_name"] = st.session_state.get("reviewer_name", "")
+            st.text_input("Your name (recorded with every confirm or reject)",
+                          key="ws_reviewer_name", placeholder="Your name, to confirm or reject")
+            st.session_state["reviewer_name"] = st.session_state.get("ws_reviewer_name", "")
         for j in others:
             mj = matches[matches["jurisdiction"] == j]
             st.markdown(pane_head(f"Equivalent in {NAMES[j]}", country=j,
@@ -677,21 +753,9 @@ def render_clause_explorer(conn, country: str, document_id: str | None,
                                     unsafe_allow_html=True)
                 continue
             showed_match = True
-            cards = []
-            for _, m in mj.iterrows():
-                strength = match.strength(m["score"])
-                width = max(6, min(100, int(m["score"] * 160)))
-                why = "".join(f'<span class="tag">✓ {_e(x)}</span>'
-                              for x in m["shared_expectation_labels"])
-                terms = (f'<div class="ws-why">Shared terms: {_e(m["shared_terms"])}</div>'
-                         if m["shared_terms"] else "")
-                cards.append(
-                    f'<div class="ws-match"><div class="top">'
-                    f'{pill(strength, STRENGTH_KIND[strength])}'
-                    f'<div class="bar"><span style="width:{width}%"></span></div></div>'
-                    f'{_cite(m)}<div class="law ws-scroll">{_highlight(m["text"], [])}</div>'
-                    f'<div>{why}</div>{terms}</div>')
-            st.markdown("".join(cards), unsafe_allow_html=True)
+            for _, m in mj.sort_values("_decision", key=lambda s: s.eq(-1),
+                                       kind="stable").iterrows():
+                _match_card(m, clause, selected_id)
         if showed_match:
             st.caption("Suggested matches, ranked by text similarity and shared checklist "
                        "items within the same risk category. Confirm before relying on them.")
@@ -704,6 +768,8 @@ def render_clause_explorer(conn, country: str, document_id: str | None,
         for j in others:
             st.markdown(pane_head(NAMES[j], country=j), unsafe_allow_html=True)
             mj = matches[matches["jurisdiction"] == j]
+            if not mj.empty:
+                mj = mj[mj["_decision"] != -1]
             verdict = st.session_state.get(f"ws_challenge_{selected_id}_{j}")
             other_row = None
             other_text = None

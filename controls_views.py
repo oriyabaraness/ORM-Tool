@@ -536,10 +536,15 @@ def _render_history(conn, log) -> None:
         rows = []
         for r in log:
             d = json.loads(r["detail"] or "{}")
-            what = (f"{state.STATUS_LABEL.get(d.get('status'), '')}"
-                    f"{' · control ' + d['control_id'] if d.get('control_id') else ''}"
-                    f"{' · wording edited' if d.get('action_edit') else ''}"
-                    if r["action"] == "review" else f"{d.get('count', '')} controls")
+            if r["action"] == "review":
+                what = (f"{state.STATUS_LABEL.get(d.get('status'), '')}"
+                        f"{' · control ' + d['control_id'] if d.get('control_id') else ''}"
+                        f"{' · wording edited' if d.get('action_edit') else ''}")
+            elif r["action"] == "match_review":
+                what = (f"{state.MATCH_LABEL.get(d.get('status'), 'Decision cleared')} "
+                        f"match · {d.get('home', '')} ↔ {d.get('other', '')}")
+            else:
+                what = f"{d.get('count', '')} controls"
             rows.append({"when": r["ts"][:19].replace("T", " "), "who": r["actor"],
                          "change": r["action"].replace("_", " "), "detail": what})
         st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch",

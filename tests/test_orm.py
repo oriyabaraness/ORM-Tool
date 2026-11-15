@@ -63,6 +63,11 @@ def _fake_docs():
     ]
 
 
+@pytest.fixture(autouse=True)
+def _state_db(tmp_path, monkeypatch):
+    monkeypatch.setenv("ORM_STATE_DB", str(tmp_path / "state.db"))
+
+
 @pytest.fixture
 def built_db(tmp_path, monkeypatch):
     manual = tmp_path / "manual"
@@ -854,6 +859,61 @@ def test_obligation_table_cells_are_filled(built_db, tmp_path, monkeypatch):
     table = tables[0]
     assert not table["action"].isna().any() and not table["status"].isna().any()
     assert table["action"].str.len().min() > 5
+
+
+# --- confirm / reject suggested matches -------------------------------------
+
+def _render_bcp(built_db, monkeypatch):
+    rendered: list[str] = []
+    monkeypatch.setitem(sys.modules, "streamlit", _fake_streamlit(rendered))
+    sys.modules.pop("orm_compare", None)
+    sys.modules.pop("ui_theme", None)
+    orm_compare = importlib.import_module("orm_compare")
+    with db.session(built_db) as conn:
+        clauses = queries.directive_clauses(conn, "IL-TEST-1")
+    bcp = clauses[clauses["text"].str.contains("business continuity plan")].iloc[0]
+    state = sys.modules["streamlit"].session_state
+    state["scope_category"] = "op_resilience"
+    state["ws_selected_IL_IL-TEST-1"] = int(bcp["provision_id"])
+    orm_compare.render_risk_compare_section(built_db)
+    return "\n".join(rendered)
+
+
+def test_confirmed_and_rejected_matches_are_shown_and_survive_a_rebuild(
+        built_db, monkeypatch):
+    from orm import state
+    with db.session(built_db) as conn:
+        home = conn.execute("SELECT text FROM provision WHERE document_id='IL-TEST-1' "
+                            "AND text LIKE '%business continuity plan%'").fetchone()["text"]
+        other = conn.execute("SELECT text FROM provision WHERE document_id='JO-TEST-1' "
+                             "AND ref='Article 1'").fetchone()["text"]
+    mkey = state.match_key("IL-TEST-1", home, "JO-TEST-1", other)
+    assert mkey == state.match_key("IL-TEST-1", home + "  ", "JO-TEST-1", other)
+    assert mkey != state.match_key("IL-TEST-1", home + " Amended.", "JO-TEST-1", other)
+
+    page = _render_bcp(built_db, monkeypatch)
+    assert "Suggested match: confirm before relying on it." in page
+
+    with state.session() as s:
+        state.save_match_review(s, mkey, status=1, reviewer="Dana",
+                                home_cite="Directive 999", other_cite="Article 1")
+    pipeline.build(built_db, fetch=False)            # provision ids may change
+    page = _render_bcp(built_db, monkeypatch)
+    assert 'class="pill found">Confirmed</span> By Dana on' in page
+
+    with state.session() as s:
+        state.save_match_review(s, mkey, status=-1, reviewer="Dana")
+        assert state.match_reviews(s, [mkey])[mkey]["status"] == -1
+        actions = [e["action"] for e in state.log_entries(s)]
+    assert actions.count("match_review") == 2
+    page = _render_bcp(built_db, monkeypatch)
+    assert ">Rejected</span> By Dana on" in page
+    review = page[page.index("ORM review"):]
+    assert "Article 1" not in review.split("Turkey")[0]    # rejected match not reviewed
+
+    with state.session() as s:
+        state.save_match_review(s, mkey, status=0, reviewer="Dana")
+        assert state.match_reviews(s, [mkey]) == {}
 
 
 # --- AI review of a clause pair ---------------------------------------------
