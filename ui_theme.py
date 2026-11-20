@@ -230,6 +230,15 @@ mark {background: var(--highlight); color: inherit; padding: 0 1px; border-radiu
   border: 1px solid var(--line); border-radius: 999px; padding: 0 8px; line-height: 20px;}
 .boi-definition-popover {font-size: 13px; color: var(--ink-2);}
 
+@media (min-width: 641px) and (max-width: 1100px) {
+  [data-testid="stMain"] [data-testid="stHorizontalBlock"] {flex-wrap: wrap; row-gap: 12px;}
+  [data-testid="stMain"] [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+    flex: 1 1 calc(50% - 1rem) !important; min-width: calc(50% - 1rem) !important;}
+  [data-testid="stMain"] div[class*="st-key-ws_actions_"] [data-testid="stHorizontalBlock"] {
+    flex-wrap: nowrap;}
+  [data-testid="stMain"] div[class*="st-key-ws_actions_"] [data-testid="stColumn"] {
+    flex: 1 1 0 !important; min-width: 0 !important;}
+}
 @media (max-width: 640px) {
   [data-testid="stMainBlockContainer"], .block-container {padding-left: 16px; padding-right: 16px;}
   .page-head {flex-direction: column; align-items: flex-start;}

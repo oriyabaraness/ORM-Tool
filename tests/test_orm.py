@@ -861,6 +861,32 @@ def test_obligation_table_cells_are_filled(built_db, tmp_path, monkeypatch):
     assert table["action"].str.len().min() > 5
 
 
+def test_sentence_printed_twice_is_one_obligation(built_db, tmp_path, monkeypatch):
+    """Regression: a directive that repeats a sentence gave two rows the same
+    okey, and the Obligations page crashed comparing them."""
+    from orm import audit
+    with db.session(built_db) as conn:
+        first = conn.execute("SELECT id FROM obligation WHERE jurisdiction='IL' "
+                             "AND category_id='op_resilience' LIMIT 1").fetchone()[0]
+        conn.execute("CREATE TEMP TABLE dup AS SELECT * FROM obligation WHERE id=?", (first,))
+        conn.execute("UPDATE dup SET id = NULL")
+        conn.execute("INSERT INTO obligation SELECT * FROM dup")
+        conn.commit()
+        df = audit.obligation_table(conn, {}, jurisdiction="IL", category_id="op_resilience")
+    assert df["okey"].is_unique
+
+    tables = []
+    fake = _fake_streamlit_full([])
+    fake.data_editor = lambda df, **_: (tables.append(df), df)[1]
+    fake.session_state["scope_category"] = "op_resilience"
+    monkeypatch.setitem(sys.modules, "streamlit", fake)
+    monkeypatch.setattr(db, "DEFAULT_DB", built_db)
+    for name in ("orm_compare", "ui_theme", "controls_views"):
+        sys.modules.pop(name, None)
+    importlib.import_module("controls_views").page_obligations()
+    assert tables and tables[0].index.is_unique
+
+
 # --- confirm / reject suggested matches -------------------------------------
 
 def _render_bcp(built_db, monkeypatch):

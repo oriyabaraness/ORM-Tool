@@ -51,6 +51,8 @@ def obligation_table(conn: sqlite3.Connection, reviews: dict[str, dict], *,
         WHERE {' AND '.join(where)}
         ORDER BY o.jurisdiction, d.ref, p.seq, o.id
     """, conn, params=params)
+    # A sentence printed twice in one directive has one okey and one review.
+    df = df.drop_duplicates(["okey", "category_id"]).reset_index(drop=True)
     if df.empty:
         return df.assign(status="", reviewer="", reviewed_at="", control_id="",
                          control_source="", control_name="", original_action="")
