@@ -110,7 +110,7 @@ Status reflects **production today**, with a note where local uncommitted code a
 | F | Control mapping and effectiveness | **Partially implemented** (prod library/upload) · **local adds design/operating tests** | Prod: 45-control library, suggestions, bank upload, text-similarity coverage. Local: `control`, `risk_control`, `control_test` with ratings. | Ship local control-test layer; keep library IDs so Controls screen still works. |
 | G | KRI monitoring and thresholds | **Missing in prod** · **Implemented locally** | Local: 5 KRIs, 30 readings, green/amber/red by direction. | Ship KRI tabs + report breaches. |
 | H | Incident tracking | **Shipped** | Full lifecycle (Detected→Closed), RCA, loss events, remediation validation, reporting assessment, `INC-DEMO-CLOUD` walkthrough, Incidents & Loss nav. | Keep demo synthetic; never auto-notify. |
-| I | Business impact and resilience | **Missing in prod** · **Partially implemented locally** | Local: 2 business services with criticality, impact tolerance, RTO/RPO, last test; incidents show tolerance breach. No full dependency graph UI. | Ship service records; deepen later if needed. |
+| I | Business impact and resilience | **Shipped** | IBS inventory, dependency graph, BIA (RTO/RPO/tolerance separate), scenarios A–E + `SCN-DEMO-CLOUD` arrangement comparison, concentration hypotheses, Operational Resilience nav. | Never invent approved tolerances; keep scenarios assumption-based. |
 | J | Management risk reporting | **Partially implemented** (prod audit pack) · **local risk report** | Prod: Excel/PDF audit pack. Local: heat map, outside appetite, KRI breaches, incidents/losses, overdue actions, weak controls, unvalidated links; Excel/PDF with synthetic watermark. | Ship Risk report page. |
 
 ---

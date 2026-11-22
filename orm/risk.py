@@ -151,15 +151,18 @@ TABLES = ("business_service", "risk", "risk_obligation", "control", "risk_contro
           "control_test", "appetite", "kri", "kri_reading", "incident",
           "incident_link", "action", "applicability", "appetite_statement",
           "kri_risk", "kri_observation", "kri_escalation", "incident_transition",
-          "incident_loss", "incident_rca", "incident_reporting")
+          "incident_loss", "incident_rca", "incident_reporting",
+          "service_dependency", "service_bia", "resilience_scenario",
+          "scenario_option", "resilience_action")
 KEYS = {"risk_obligation": ("risk_id", "okey"), "risk_control": ("risk_id", "control_id"),
         "kri_reading": ("kri_id", "period"), "appetite": ("category_id",),
         "incident_link": ("incident_id", "kind", "target_id"),
-        "kri_risk": ("kri_id", "risk_id"), "incident_rca": ("incident_id",)}
+        "kri_risk": ("kri_id", "risk_id"), "incident_rca": ("incident_id",),
+        "service_bia": ("service_id",)}
 _TIMESTAMPED = {"business_service", "risk", "risk_obligation", "control", "control_test",
                 "appetite", "kri", "incident", "action", "applicability",
                 "appetite_statement", "kri_escalation", "incident_loss",
-                "incident_reporting"}
+                "incident_reporting", "resilience_scenario", "resilience_action"}
 
 APPLICABILITY_STATUSES = (
     "not_yet_assessed",
@@ -414,9 +417,123 @@ CREATE INDEX IF NOT EXISTS ix_inc_tr ON incident_transition(incident_id, at);
 CREATE INDEX IF NOT EXISTS ix_inc_loss ON incident_loss(incident_id);
 """
 
+_SERVICE_EXTRA = {
+    "legal_entity": "TEXT",
+    "jurisdiction": "TEXT",
+    "customer_impact": "TEXT",
+    "is_important_business_service": "INTEGER DEFAULT 0",
+    "ibs_designation_rationale": "TEXT",
+    "critical_processes_json": "TEXT",
+    "technology_deps_json": "TEXT",
+    "third_party_deps_json": "TEXT",
+    "people_deps_json": "TEXT",
+    "data_deps_json": "TEXT",
+    "alternate_arrangements": "TEXT",
+    "recovery_objectives": "TEXT",
+    "last_resilience_assessment": "TEXT",
+}
+
+_RESILIENCE_SCHEMA = """
+CREATE TABLE IF NOT EXISTS service_dependency (
+    id TEXT PRIMARY KEY,
+    service_id TEXT NOT NULL REFERENCES business_service(id),
+    layer TEXT NOT NULL,              -- process|application|infrastructure|third_party|recovery
+    name TEXT NOT NULL,
+    parent_id TEXT,                   -- optional upstream dependency
+    shared_key TEXT,                  -- same key = shared across services
+    has_alternative INTEGER,          -- 1|0|NULL unknown
+    last_tested_at TEXT,
+    test_result TEXT,
+    is_spof INTEGER NOT NULL DEFAULT 0,
+    note TEXT,
+    is_synthetic INTEGER NOT NULL DEFAULT 0);
+
+CREATE TABLE IF NOT EXISTS service_bia (
+    service_id TEXT PRIMARY KEY REFERENCES business_service(id),
+    financial_impact TEXT,
+    customer_impact TEXT,
+    operational_impact TEXT,
+    reputational_impact TEXT,
+    legal_regulatory TEXT,
+    criticality TEXT,
+    max_tolerable_disruption_hours REAL,
+    rto_hours REAL,
+    rpo_hours REAL,
+    impact_tolerance_hours REAL,      -- NULL = not defined (never invent)
+    impact_tolerance_basis TEXT,
+    evidence TEXT,
+    assumptions_note TEXT,
+    updated_at TEXT, updated_by TEXT,
+    is_synthetic INTEGER NOT NULL DEFAULT 0);
+
+CREATE TABLE IF NOT EXISTS resilience_scenario (
+    id TEXT PRIMARY KEY,
+    code TEXT NOT NULL,               -- A|B|C|D|E|CUSTOM-…
+    name TEXT NOT NULL,
+    description TEXT,
+    scenario_type TEXT,               -- cloud|provider|cyber|data|recovery|custom
+    starting_conditions TEXT,
+    disruption_start TEXT,
+    duration_minutes REAL,
+    affected_services_json TEXT,
+    affected_deps_json TEXT,
+    avg_tx_per_hour REAL,
+    failure_rate_pct REAL,
+    estimated_customers REAL,
+    recovery_strategy TEXT,
+    recovery_assumptions TEXT,
+    control_effectiveness_assumptions TEXT,
+    recovery_completion_minutes REAL,
+    confidence TEXT,                  -- high|medium|low + prose
+    evidence_sources TEXT,
+    linked_risk_id TEXT,
+    linked_control_ids_json TEXT,
+    is_template INTEGER NOT NULL DEFAULT 1,
+    is_synthetic INTEGER NOT NULL DEFAULT 0,
+    provenance TEXT NOT NULL DEFAULT 'user',
+    validation_status TEXT NOT NULL DEFAULT 'draft',
+    created_at TEXT NOT NULL, created_by TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL, updated_by TEXT NOT NULL DEFAULT '');
+
+CREATE TABLE IF NOT EXISTS scenario_option (
+    id TEXT PRIMARY KEY,
+    scenario_id TEXT NOT NULL REFERENCES resilience_scenario(id),
+    option_code TEXT NOT NULL,
+    label TEXT NOT NULL,
+    arrangement_description TEXT,
+    assumed_duration_minutes REAL,
+    assumed_failure_rate_pct REAL,
+    assumed_customers REAL,
+    control_tested INTEGER NOT NULL DEFAULT 0,
+    unresolved_deficiency TEXT,
+    assumptions_json TEXT,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    is_synthetic INTEGER NOT NULL DEFAULT 0);
+
+CREATE TABLE IF NOT EXISTS resilience_action (
+    id TEXT PRIMARY KEY,
+    scenario_id TEXT,
+    service_id TEXT,
+    title TEXT NOT NULL,
+    owner TEXT,
+    due_at TEXT,
+    status TEXT NOT NULL DEFAULT 'open',
+    related_risk_id TEXT,
+    related_control_id TEXT,
+    rationale TEXT,
+    is_synthetic INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL, created_by TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL, updated_by TEXT NOT NULL DEFAULT '',
+    provenance TEXT NOT NULL DEFAULT 'user',
+    validation_status TEXT NOT NULL DEFAULT 'draft');
+
+CREATE INDEX IF NOT EXISTS ix_svc_dep ON service_dependency(service_id, layer);
+CREATE INDEX IF NOT EXISTS ix_scn_opt ON scenario_option(scenario_id, sort_order);
+"""
+
 
 def migrate(conn: sqlite3.Connection) -> None:
-    """Add RCSA/KRI/incident columns and tables if missing. Never drops data."""
+    """Add RCSA/KRI/incident/resilience columns and tables if missing. Never drops data."""
     def add(table: str, cols: dict[str, str]) -> None:
         have = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
         for name, decl in cols.items():
@@ -427,8 +544,10 @@ def migrate(conn: sqlite3.Connection) -> None:
     add("kri", _KRI_EXTRA)
     add("incident", _INCIDENT_EXTRA)
     add("action", _ACTION_EXTRA)
+    add("business_service", _SERVICE_EXTRA)
     conn.executescript(_KRI_APPETITE_SCHEMA)
     conn.executescript(_INCIDENT_MGMT_SCHEMA)
+    conn.executescript(_RESILIENCE_SCHEMA)
 
 
 @contextmanager
