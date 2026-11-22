@@ -70,6 +70,7 @@ Primary navigation (left rail on desktop, in this order):
 | **Risk register** | Synthetic operational risk register (inherent/residual, controls, KRIs, incidents). Clearly labelled demo data. |
 | **RCSA** | Risk and Control Self-Assessment workspace: 5×5 heat map, explicit residual approval, control gaps, create risk from obligation. Prototype methodology only. |
 | **KRI & Appetite** | Key risk indicators, appetite/tolerance statements, breach escalations and trends. Synthetic observations; no automatic external alerts. |
+| **Incidents & Loss** | Operational incident lifecycle, loss events, root-cause investigation, remediation with independent validation, and regulatory reporting assessment. Synthetic demo labelled; no automatic notification decisions. |
 | **Risk report** | Management risk report export (Excel/PDF) with citations and synthetic watermark. |
 | **Regulatory Intelligence** | Source library, obligation explorer, cross-jurisdiction requirement comparison, applicability review, and map-to-risk suggestions. Exact quotes stay separate from machine interpretation. |
 | ~~Market context~~ | Switched off (macro data is not part of the controls workflow); code kept in `reference_views.py`. |

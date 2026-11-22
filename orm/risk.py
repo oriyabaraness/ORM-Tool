@@ -150,14 +150,16 @@ CREATE INDEX IF NOT EXISTS ix_app_doc ON applicability(document_id);
 TABLES = ("business_service", "risk", "risk_obligation", "control", "risk_control",
           "control_test", "appetite", "kri", "kri_reading", "incident",
           "incident_link", "action", "applicability", "appetite_statement",
-          "kri_risk", "kri_observation", "kri_escalation")
+          "kri_risk", "kri_observation", "kri_escalation", "incident_transition",
+          "incident_loss", "incident_rca", "incident_reporting")
 KEYS = {"risk_obligation": ("risk_id", "okey"), "risk_control": ("risk_id", "control_id"),
         "kri_reading": ("kri_id", "period"), "appetite": ("category_id",),
         "incident_link": ("incident_id", "kind", "target_id"),
-        "kri_risk": ("kri_id", "risk_id")}
+        "kri_risk": ("kri_id", "risk_id"), "incident_rca": ("incident_id",)}
 _TIMESTAMPED = {"business_service", "risk", "risk_obligation", "control", "control_test",
                 "appetite", "kri", "incident", "action", "applicability",
-                "appetite_statement", "kri_escalation"}
+                "appetite_statement", "kri_escalation", "incident_loss",
+                "incident_reporting"}
 
 APPLICABILITY_STATUSES = (
     "not_yet_assessed",
@@ -317,9 +319,104 @@ CREATE INDEX IF NOT EXISTS ix_kri_obs ON kri_observation(kri_id, period);
 CREATE INDEX IF NOT EXISTS ix_kri_esc ON kri_escalation(kri_id, ack_status);
 """
 
+_INCIDENT_EXTRA = {
+    "workflow_status": "TEXT",          # detected…closed (lifecycle)
+    "closed_at": "TEXT",
+    "restored_at": "TEXT",
+    "recovery_started_at": "TEXT",
+    "discovery_source": "TEXT",
+    "business_process": "TEXT",
+    "legal_entity": "TEXT",
+    "jurisdiction": "TEXT",
+    "severity_rationale": "TEXT",
+    "customer_impact": "TEXT",
+    "financial_impact_note": "TEXT",
+    "regulatory_impact": "TEXT",
+    "third_party_involvement": "TEXT",
+    "lessons_learned": "TEXT",
+    "failed_transactions": "INTEGER",
+    "timezone": "TEXT DEFAULT 'UTC'",
+}
+_ACTION_EXTRA = {
+    "priority": "TEXT",
+    "control_deficiency": "TEXT",
+    "related_risk_id": "TEXT",
+    "evidence_required": "TEXT",
+    "closure_reviewer": "TEXT",
+    "validation_outcome": "TEXT",  # pending|validated|rejected
+    "validated_at": "TEXT",
+}
+
+_INCIDENT_MGMT_SCHEMA = """
+CREATE TABLE IF NOT EXISTS incident_transition (
+    id TEXT PRIMARY KEY,
+    incident_id TEXT NOT NULL REFERENCES incident(id),
+    from_status TEXT,
+    to_status TEXT NOT NULL,
+    actor TEXT NOT NULL,
+    at TEXT NOT NULL,
+    note TEXT,
+    is_synthetic INTEGER NOT NULL DEFAULT 0);
+
+CREATE TABLE IF NOT EXISTS incident_loss (
+    id TEXT PRIMARY KEY,
+    incident_id TEXT NOT NULL REFERENCES incident(id),
+    gross_loss REAL NOT NULL DEFAULT 0,
+    recovered REAL NOT NULL DEFAULT 0,
+    currency TEXT NOT NULL DEFAULT 'ILS',
+    loss_category TEXT,
+    recognition_date TEXT,
+    evidence_ref TEXT,
+    certainty TEXT NOT NULL DEFAULT 'estimate',  -- confirmed|estimate|hypothesis
+    note TEXT,
+    created_at TEXT NOT NULL, created_by TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL, updated_by TEXT NOT NULL DEFAULT '',
+    provenance TEXT NOT NULL DEFAULT 'user',
+    validation_status TEXT NOT NULL DEFAULT 'draft',
+    is_synthetic INTEGER NOT NULL DEFAULT 0);
+
+CREATE TABLE IF NOT EXISTS incident_rca (
+    incident_id TEXT PRIMARY KEY REFERENCES incident(id),
+    what_happened TEXT,
+    technical_trigger TEXT,
+    process_weakness TEXT,
+    detection_gap TEXT,
+    controls_failed TEXT,          -- JSON list or prose
+    controls_worked TEXT,
+    evidence TEXT,
+    unconfirmed TEXT,
+    five_whys_json TEXT,           -- JSON list of {why, answer, certainty}
+    updated_at TEXT, updated_by TEXT,
+    is_synthetic INTEGER NOT NULL DEFAULT 0);
+
+CREATE TABLE IF NOT EXISTS incident_reporting (
+    id TEXT PRIMARY KEY,
+    incident_id TEXT NOT NULL REFERENCES incident(id),
+    obligation_okey TEXT,
+    document_id TEXT,
+    citation TEXT,
+    jurisdiction TEXT,
+    trigger_criteria TEXT,
+    review_required TEXT,
+    evidence TEXT,
+    decision_owner TEXT,
+    reporting_status TEXT NOT NULL DEFAULT 'not_assessed',
+    -- not_assessed|under_review|not_required|submitted|not_applicable
+    decision_note TEXT,
+    decided_at TEXT,
+    created_at TEXT NOT NULL, created_by TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL, updated_by TEXT NOT NULL DEFAULT '',
+    provenance TEXT NOT NULL DEFAULT 'user',
+    validation_status TEXT NOT NULL DEFAULT 'draft',
+    is_synthetic INTEGER NOT NULL DEFAULT 0);
+
+CREATE INDEX IF NOT EXISTS ix_inc_tr ON incident_transition(incident_id, at);
+CREATE INDEX IF NOT EXISTS ix_inc_loss ON incident_loss(incident_id);
+"""
+
 
 def migrate(conn: sqlite3.Connection) -> None:
-    """Add RCSA/KRI columns and tables if missing. Never drops data."""
+    """Add RCSA/KRI/incident columns and tables if missing. Never drops data."""
     def add(table: str, cols: dict[str, str]) -> None:
         have = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
         for name, decl in cols.items():
@@ -328,7 +425,10 @@ def migrate(conn: sqlite3.Connection) -> None:
     add("risk", _RISK_EXTRA)
     add("control", _CONTROL_EXTRA)
     add("kri", _KRI_EXTRA)
+    add("incident", _INCIDENT_EXTRA)
+    add("action", _ACTION_EXTRA)
     conn.executescript(_KRI_APPETITE_SCHEMA)
+    conn.executescript(_INCIDENT_MGMT_SCHEMA)
 
 
 @contextmanager

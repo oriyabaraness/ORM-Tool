@@ -28,13 +28,14 @@ if not sys.path or os.path.abspath(sys.path[0] or ".") != _APP_DIR:
 # delete orm.match while the other is half-way through importing it. The lock
 # lives on `sys` because this file is re-executed on every run.
 _FRESH = ("orm", "orm_compare", "ui_theme", "controls_views", "risk_views",
-          "regulatory_views", "rcsa_views", "kri_views")
+          "regulatory_views", "rcsa_views", "kri_views", "incident_views")
 with sys.__dict__.setdefault("_clausewiz_import_lock", threading.RLock()):
     for _name in list(sys.modules):
         if _name in _FRESH or _name.startswith("orm."):
             del sys.modules[_name]
     from ui_theme import APP_NAME, apply_theme  # noqa: E402
     import controls_views  # noqa: E402
+    import incident_views  # noqa: E402
     import kri_views  # noqa: E402
     import orm_compare  # noqa: E402
     import rcsa_views  # noqa: E402
@@ -79,6 +80,8 @@ PAGES = {
                     icon=":material/grid_on:", url_path="rcsa"),
     "kri": st.Page(kri_views.page_kri, title="KRI & Appetite",
                    icon=":material/monitoring:", url_path="kri"),
+    "incidents": st.Page(incident_views.page_incidents, title="Incidents & Loss",
+                         icon=":material/emergency:", url_path="incidents"),
     "risk_report": st.Page(risk_views.page_report, title="Risk report",
                            icon=":material/summarize:", url_path="risk-report"),
     "regulatory": st.Page(regulatory_views.page_regulatory_intelligence,
@@ -95,14 +98,15 @@ controls_views.PAGES = PAGES
 risk_views.PAGES = PAGES
 rcsa_views.PAGES = PAGES
 kri_views.PAGES = PAGES
+incident_views.PAGES = PAGES
 regulatory_views.PAGES = PAGES
 
 nav = st.navigation({
     "Compare": [PAGES["home"], PAGES["compare"], PAGES["coverage"], PAGES["gaps"],
                 PAGES["deadlines"], PAGES["changes"]],
     "Controls": [PAGES["obligations"], PAGES["controls"], PAGES["audit"]],
-    "Risk": [PAGES["risks"], PAGES["rcsa"], PAGES["kri"], PAGES["risk_report"],
-             PAGES["regulatory"]],
+    "Risk": [PAGES["risks"], PAGES["rcsa"], PAGES["kri"], PAGES["incidents"],
+             PAGES["risk_report"], PAGES["regulatory"]],
     "Reference": [PAGES["sources"]],
 }, position="sidebar")
 st.sidebar.markdown(
