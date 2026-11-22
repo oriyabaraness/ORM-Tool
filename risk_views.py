@@ -98,23 +98,39 @@ def _status_line(items: list[tuple[str, str]]) -> str:
 
 
 def _heat(reg: pd.DataFrame) -> str:
-    cells = ['<div class="rk-heat"><div class="ax"></div>']
-    cells += [f'<div class="ax">L{i}</div>' for i in range(1, 6)]
+    """5×5 residual matrix. Uses a table + inline colours so CSS load order
+    cannot collapse the grid into raw L1/I5 text (Streamlit HTML quirk)."""
+    bg = {"low": "#e6f2ea", "medium": "#f7f0d8", "moderate": "#f7f0d8",
+          "high": "#f3e0c8", "critical": "#f3d6d2"}
+    rows = ['<table class="rk-heat-table" style="border-collapse:separate;'
+            'border-spacing:3px;font-variant-numeric:tabular-nums">'
+            '<thead><tr><th></th>']
+    rows += [f'<th style="font-size:11px;color:#6b7785;font-weight:500">L{i}</th>'
+             for i in range(1, 6)]
+    rows.append("</tr></thead><tbody>")
     for impact in range(5, 0, -1):
-        cells.append(f'<div class="ax">I{impact}</div>')
+        rows.append(f'<tr><th style="font-size:11px;color:#6b7785;font-weight:500">'
+                    f'I{impact}</th>')
         for like in range(1, 6):
             ids = reg[(reg["residual_impact"] == impact)
                       & (reg["residual_likelihood"] == like)]["id"].tolist() \
                 if not reg.empty else []
             kind = risk.band(like * impact).lower()
-            body = (f"<b>{len(ids)}</b><span>{_e(' '.join(i.replace('RSK-', '') for i in ids))}"
-                    "</span>") if ids else ""
-            cells.append(f'<div class="rk-cell {kind}" title="Likelihood {like} × impact '
-                         f'{impact}: {risk.band(like * impact)}">{body}</div>')
-    cells.append("</div>")
-    cells.append('<div class="rk-heat-cap">Residual risk: likelihood (L) across, impact '
-                 '(I) up. Numbers are risk IDs.</div>')
-    return "".join(cells)
+            colour = bg.get(kind, "#f7f9fb")
+            n = len(ids)
+            tip = _e(f"Likelihood {like} × impact {impact}: "
+                     f"{risk.band(like * impact)}"
+                     + (f" · {', '.join(ids)}" if ids else " · empty"))
+            body = f"<b style='font-size:14px'>{n}</b>" if n else "·"
+            rows.append(
+                f'<td title="{tip}" style="width:48px;height:44px;text-align:center;'
+                f'vertical-align:middle;border-radius:4px;border:1px solid #e6ebf0;'
+                f'background:{colour}">{body}</td>')
+        rows.append("</tr>")
+    rows.append("</tbody></table>")
+    rows.append('<div class="rk-heat-cap">Residual risk: likelihood (L) across, '
+                "impact (I) up. Cell value = count of risks (not IDs).</div>")
+    return "".join(rows)
 
 
 def _register_table(reg: pd.DataFrame) -> str:
@@ -161,9 +177,15 @@ def page_risks() -> None:
         if reg.empty:
             st.markdown(notice("No risks recorded yet."), unsafe_allow_html=True)
             return
-        # Optional filter from Overview residual-band click
+        # Optional filters from Overview (band or heat-map cell)
+        ids = st.session_state.pop("ov_filter_ids", None)
         band = st.session_state.pop("ov_filter_band", None)
-        if band:
+        if ids:
+            filtered = reg[reg["id"].isin(ids)]
+            if not filtered.empty:
+                reg = filtered
+                st.caption(f"Filtered from Overview · heat-map cell · {len(reg)} risk(s)")
+        elif band:
             mapped = "Medium" if band == "Moderate" else band
             filtered = reg[reg["residual_band"].isin([band, mapped])]
             if not filtered.empty:

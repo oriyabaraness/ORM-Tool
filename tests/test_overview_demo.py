@@ -34,8 +34,28 @@ def test_overview_snapshot_from_seeded_records():
         assert "overdue_risk_actions" in snap["metrics"]
         assert snap["register"] is not None
         assert not snap["exposure"].empty
+        assert isinstance(snap.get("heat_cells"), dict)
         assert "issue" in snap["attention"].columns or snap["attention"].empty
         assert "is a live revolut feed" in snap["notice"].lower()  # negation phrase
+
+
+def test_overview_heat_html_is_matrix_not_raw_ids(monkeypatch):
+    """Heat map must be a table of counts — not collapsed L1/I5/ID text soup."""
+    import sys
+    monkeypatch.setitem(sys.modules, "streamlit", _fake_streamlit_full([]))
+    import overview_views as ov_views
+    with risk.session() as conn:
+        from orm import demo_data, incident_mgmt, kri_appetite
+        demo_data.seed(conn, None)
+        kri_appetite.seed(conn, force=True)
+        incident_mgmt.seed(conn, None, force=True)
+        snap = overview.snapshot(conn)
+    html = ov_views._residual_heat_html(snap)
+    assert '<table class="ov-heat"' in html
+    assert "L1" in html and "I5" in html
+    # Counts only in cells — RSK ids may appear in title= tooltips, not as cell body soup
+    assert ">RSK-" not in html
+    assert "background:" in html  # inline styles (CSS-class independent)
 
 
 def test_demo_mode_isolates_and_reset_spares_live(_stores):

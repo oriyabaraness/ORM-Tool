@@ -77,16 +77,26 @@ def snapshot(conn, index_conn=None, *, today: dt.date | None = None,
     kri_breaches = pd.DataFrame()
     kri_trends = pd.DataFrame()
     kri_trend_label = ""
+    kri_note = ""
     if ka is not None:
         try:
             lib = ka.library(conn)
             kri_breaches = lib[lib["rag"].isin(["Red", "Amber"])] if not lib.empty else lib
-            kid = "KRI-PAY-FAIL"
-            if not lib.empty and kid in set(lib["id"]):
-                kri_trends = ka.observations(conn, kid)
-                kri_trend_label = kid
-            elif not lib.empty:
-                kri_trend_label = lib.iloc[0]["id"]
+            # Prefer a breached KRI that has a real observation series
+            candidates = []
+            if not kri_breaches.empty:
+                candidates.extend(kri_breaches["id"].tolist())
+            if not lib.empty:
+                candidates.extend([i for i in lib["id"].tolist() if i not in candidates])
+            for kid in candidates:
+                obs = ka.observations(conn, kid)
+                if obs is not None and not obs.empty and "value" in obs.columns:
+                    kri_trends = obs
+                    kri_trend_label = kid
+                    if len(obs) >= 2:
+                        break
+            if kri_trends.empty and "KRI-PAY-FAIL" in set(lib["id"] if not lib.empty else []):
+                kri_trend_label = "KRI-PAY-FAIL"
                 kri_trends = ka.observations(conn, kri_trend_label)
         except Exception:
             pass
@@ -94,8 +104,12 @@ def snapshot(conn, index_conn=None, *, today: dt.date | None = None,
         kris = risk.kri_status(conn)
         kri_breaches = kris[kris["rag"].isin(["Red", "Amber"])] if not kris.empty else kris
         if kri_trends.empty and not kris.empty:
-            kri_trend_label = kris.iloc[0]["id"]
-            kri_trends = risk.kri_readings(conn, kri_trend_label)
+            for kid in kris["id"].tolist():
+                series = risk.kri_readings(conn, kid)
+                if series is not None and not series.empty:
+                    kri_trends = series
+                    kri_trend_label = kid
+                    break
 
     high_inc = pd.DataFrame()
     if not incidents.empty and "severity" in incidents.columns:
@@ -120,11 +134,30 @@ def snapshot(conn, index_conn=None, *, today: dt.date | None = None,
     has_kri_history = (
         kri_trends is not None and not kri_trends.empty
         and "value" in kri_trends.columns and len(kri_trends) >= 2)
+    if not kri_breaches.empty and not has_kri_history:
+        kri_note = (
+            f"{len(kri_breaches)} KRI(s) are currently Red/Amber on latest status, "
+            "but a multi-point observation series is not available in this store. "
+            "Breach count uses latest RAG; the trend chart is blank until history exists."
+        )
+    elif has_kri_history:
+        kri_note = f"Trend series: {kri_trend_label} (recorded observations)."
 
     heat = pd.DataFrame(0, index=range(5, 0, -1), columns=range(1, 6))
+    heat_cells: dict[tuple[int, int], list[dict]] = {}
     if not reg.empty:
         for _, r in reg.iterrows():
-            heat.loc[int(r["residual_impact"]), int(r["residual_likelihood"])] += 1
+            try:
+                ri, rl = int(r["residual_impact"]), int(r["residual_likelihood"])
+            except (TypeError, ValueError):
+                continue
+            heat.loc[ri, rl] += 1
+            heat_cells.setdefault((ri, rl), []).append({
+                "id": r["id"],
+                "title": r.get("title") or r["id"],
+                "owner": r.get("owner") or "",
+                "band": r.get("residual_band") or risk.band(rl * ri),
+            })
 
     changes = pd.DataFrame()
     if index_conn is not None and queries is not None:
@@ -204,9 +237,11 @@ def snapshot(conn, index_conn=None, *, today: dt.date | None = None,
         "kri_trends": kri_trends,
         "kri_trend_label": kri_trend_label,
         "has_kri_history": has_kri_history,
+        "kri_note": kri_note,
         "high_incidents": high_inc,
         "priority_actions": overdue.head(8) if not overdue.empty else overdue,
         "heat": heat,
+        "heat_cells": heat_cells,
         "exposure": exposure,
         "residual_distribution": residual_dist,
         "inherent_distribution": inherent_dist,
