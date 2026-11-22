@@ -52,33 +52,31 @@ CSS = """
   font-weight: 600; color: #5c4300; background: var(--partial-bg);
   border: 1px solid #e0c56a; border-radius: 999px; padding: 1px 8px;}
 .ov-kpis {display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px; margin: 14px 0 16px;}
-.ov-kpi {border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px;
+  gap: 8px; margin: 12px 0 8px;}
+.ov-kpi {border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px 8px;
   background: var(--surface);}
 .ov-kpi .label {font-size: 11.5px; color: var(--ink-3); font-weight: 500;}
-.ov-kpi .value {font-size: 24px; font-weight: 600; color: var(--ink);
+.ov-kpi .value {font-size: 22px; font-weight: 600; color: var(--ink);
   font-variant-numeric: tabular-nums; letter-spacing: -0.03em;
   margin-top: 4px; line-height: 1;}
-.ov-kpi .hint {font-size: 11px; color: var(--ink-3); margin-top: 6px;}
+.ov-kpi .hint {font-size: 11px; color: var(--ink-3); margin-top: 5px;}
 .ov-kpi.warn .value {color: var(--gap);}
-.ov-sec {margin: 6px 0 18px;}
+.ov-sec {margin: 4px 0 14px;}
 .ov-sec-h {font-size: 13px; font-weight: 600; color: var(--ink);
   letter-spacing: -0.02em; padding-bottom: 7px; margin: 0 0 10px;
   border-bottom: 1px solid var(--line); display: flex; align-items: baseline;
   gap: 10px;}
 .ov-sec-h .meta {margin-left: auto; font-weight: 500; color: var(--ink-3);
   font-size: 12px;}
-.ov-panel {border: 1px solid var(--line); border-radius: 6px;
-  background: var(--surface); padding: 12px 14px;}
 .ov-heat-wrap {overflow-x: auto; max-width: 100%;}
-.ov-heat {border-collapse: separate; border-spacing: 3px; margin: 0 auto 0 0;
-  font-variant-numeric: tabular-nums;}
+.ov-heat {width: 100%; max-width: 560px; border-collapse: separate; border-spacing: 4px;
+  table-layout: fixed; font-variant-numeric: tabular-nums;}
 .ov-heat th {font-size: 11px; font-weight: 500; color: #6b7785; text-align: center;
-  padding: 2px 4px;}
-.ov-heat td.cell {width: 52px; height: 48px; text-align: center; vertical-align: middle;
-  border-radius: 4px; border: 1px solid #e6ebf0; font-size: 14px; font-weight: 600;}
-.ov-heat td.empty {background: #f7f9fb; color: #9aa5b1; font-weight: 500;}
-.ov-heat-cap {font-size: 11.5px; color: var(--ink-3); margin-top: 8px;}
+  padding: 2px 0;}
+.ov-heat th.corner {width: 28px;}
+.ov-heat td.cell {height: 58px; text-align: center; vertical-align: middle;
+  border-radius: 4px; border: 1px solid transparent; font-size: 15px; font-weight: 600;}
+.ov-heat-cap {font-size: 11.5px; color: var(--ink-3); margin-top: 8px; line-height: 1.4;}
 .ov-mat {width: 100%; border-collapse: collapse; font-size: 12.5px;}
 .ov-mat th {text-align: left; font-size: 11px; font-weight: 600; color: var(--ink-3);
   border-bottom: 1px solid var(--line); padding: 0 6px 6px;}
@@ -87,15 +85,22 @@ CSS = """
 .ov-mat .risk {color: var(--ink); font-weight: 500;}
 .ov-mat .ref {display: block; font-size: 11px; color: var(--ink-3); font-weight: 400;
   margin-top: 1px;}
-.ov-attn {width: 100%; border-collapse: collapse; font-size: 12.5px;}
+.ov-attn {width: 100%; border-collapse: collapse; font-size: 12.5px; table-layout: fixed;}
 .ov-attn th {text-align: left; font-size: 11px; font-weight: 600; color: var(--ink-3);
-  border-bottom: 1px solid var(--line); padding: 0 6px 7px;}
-.ov-attn td {padding: 8px 6px; border-bottom: 1px solid var(--line); color: var(--ink-2);
+  border-bottom: 1px solid var(--line); padding: 0 8px 7px;}
+.ov-attn td {padding: 8px; border-bottom: 1px solid var(--line); color: var(--ink-2);
   vertical-align: top;}
-.ov-attn .issue {color: var(--ink); font-weight: 500; max-width: 280px;}
+.ov-attn .issue {color: var(--ink); font-weight: 500;}
 .ov-attn .ref {display: block; font-size: 11px; color: var(--ink-3); font-weight: 400;}
+.ov-attn th:nth-child(1), .ov-attn td:nth-child(1) {width: 28%;}
+.ov-attn th:nth-child(2), .ov-attn td:nth-child(2) {width: 16%;}
+.ov-attn th:nth-child(3), .ov-attn td:nth-child(3) {width: 10%;}
+.ov-attn th:nth-child(4), .ov-attn td:nth-child(4) {width: 18%;}
+.ov-attn th:nth-child(5), .ov-attn td:nth-child(5) {width: 14%;}
+.ov-attn th:nth-child(6), .ov-attn td:nth-child(6) {width: 14%;}
 .ov-ri {display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;}
-.ov-ri-item {border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px;}
+.ov-ri-item {border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px;
+  background: var(--surface);}
 .ov-ri-item .n {font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums;}
 .ov-ri-item .l {font-size: 11.5px; color: var(--ink-3); margin-top: 3px; line-height: 1.35;}
 .ov-dist-row {display: grid; grid-template-columns: 72px 1fr 28px; gap: 8px;
@@ -116,7 +121,7 @@ CSS = """
 }
 @media (max-width: 560px) {
   .ov-kpis, .ov-ri {grid-template-columns: 1fr;}
-  .ov-heat td.cell {width: 40px; height: 40px; font-size: 12px;}
+  .ov-heat td.cell {height: 44px; font-size: 13px;}
 }
 </style>
 """
@@ -244,11 +249,12 @@ def _kpi_strip(snap: dict) -> None:
             f'<div class="hint">{_e(hint)}</div></div>')
     st.markdown(f'<div class="ov-kpis">{"".join(cards)}</div>',
                 unsafe_allow_html=True)
+    # Compact text navigation (avoid page_link material icons — they read as prototype)
     cols = st.columns(4, gap="small")
-    for col, (key, label, _v, page, _h, _w) in zip(cols, items):
+    short = ["Risks", "KRIs", "Controls", "Actions"]
+    for col, (key, label, _v, page, _h, _w), s in zip(cols, items, short):
         with col:
-            if st.button("Open", key=f"ov_kpi_{key}", width="stretch",
-                         help=label):
+            if st.button(s, key=f"ov_kpi_{key}", width="stretch", help=label):
                 if PAGES.get(page):
                     st.switch_page(PAGES[page])
 
@@ -256,9 +262,15 @@ def _kpi_strip(snap: dict) -> None:
 def _residual_heat_html(snap: dict) -> str:
     """5×5 residual matrix with INLINE styles (Streamlit-safe). Counts only."""
     cells = snap.get("heat_cells") or {}
+    # Empty cells keep a faint band tint so the matrix reads as a real grid
+    empty_bg = {
+        "Low": "#f3f8f4", "Moderate": "#faf7ec", "Medium": "#faf7ec",
+        "High": "#faf3ea", "Critical": "#faf0ee",
+    }
     rows = [
-        '<div class="ov-heat-wrap" role="img" aria-label="Residual risk heat map">'
-        '<table class="ov-heat"><thead><tr><th></th>'
+        '<div class="ov-heat-wrap" role="img" aria-label="Residual risk heat map, '
+        'likelihood across, impact up">'
+        '<table class="ov-heat"><thead><tr><th class="corner"></th>'
     ]
     for like in range(1, 6):
         rows.append(f"<th>L{like}</th>")
@@ -271,28 +283,29 @@ def _residual_heat_html(snap: dict) -> str:
             band = risk.band(like * impact)
             if band == "Medium":
                 band = "Moderate"
-            bg = HEAT_BG.get(band, "#f7f9fb")
-            fg = HEAT_FG.get(band, "#6b7785")
             if n:
                 titles = "; ".join(
                     f"{e['id']} {e['title']}" for e in entries[:6])
                 tip = _e(f"Likelihood {like} × Impact {impact} · {band} · {titles}")
+                bg = HEAT_BG.get(band, "#f7f9fb")
+                fg = HEAT_FG.get(band, "#6b7785")
                 body = str(n)
-                cls = "cell"
-                style = (f"background:{bg};color:{fg};border-color:{fg}33;")
+                style = (f"background-color:{bg};color:{fg};"
+                         f"border:1px solid {fg}44;")
             else:
                 tip = _e(f"Likelihood {like} × Impact {impact} · {band} · empty")
-                body = "·"
-                cls = "cell empty"
-                style = "background:#f7f9fb;color:#c0c8d1;"
+                bg = empty_bg.get(band, "#f7f9fb")
+                body = ""
+                style = f"background-color:{bg};border:1px solid #e8edf2;"
             rows.append(
-                f'<td class="{cls}" style="{style}" title="{tip}">{body}</td>')
+                f'<td class="cell" style="{style}" bgcolor="{bg}" '
+                f'title="{tip}">{body}</td>')
         rows.append("</tr>")
     rows.append(
         "</tbody></table>"
-        '<div class="ov-heat-cap">X = Likelihood (1–5) · Y = Impact (5–1). '
-        "Cell shows risk count only. Hover for references. Colour = score band."
-        "</div></div>")
+        '<div class="ov-heat-cap">Likelihood → · Impact ↑ · Cell = risk count · '
+        "Colour = residual score band (Low / Moderate / High / Critical). "
+        "Hover a cell for references.</div></div>")
     return "".join(rows)
 
 
@@ -303,11 +316,9 @@ def _heat_and_distribution(snap: dict) -> None:
         unsafe_allow_html=True)
     left, right = st.columns([1.55, 1], gap="medium")
     with left:
-        st.markdown('<div class="ov-panel">', unsafe_allow_html=True)
         st.markdown("**Residual risk heat map**")
         st.markdown(_residual_heat_html(snap), unsafe_allow_html=True)
 
-        # Clickable cell filter — Streamlit-native, no fragile JS
         cells = snap.get("heat_cells") or {}
         occupied = sorted(
             ((i, l, entries) for (i, l), entries in cells.items() if entries),
@@ -321,63 +332,75 @@ def _heat_and_distribution(snap: dict) -> None:
                 "Open risks in cell",
                 ["—"] + list(labels),
                 key="ov_heat_cell",
-                help="Select a populated matrix cell to jump to the Risk Register.")
-            if pick != "—" and st.button("Filter register to cell",
+                help="Jump to Risk Register filtered to this matrix cell.")
+            if pick != "—" and st.button("Open cell in register",
                                         key="ov_heat_go"):
                 _i, _l, entries = labels[pick]
                 st.session_state["ov_filter_ids"] = [x["id"] for x in entries]
                 st.session_state["ov_filter_band"] = None
                 if PAGES.get("risks"):
                     st.switch_page(PAGES["risks"])
-        st.markdown("</div>", unsafe_allow_html=True)
 
     with right:
-        st.markdown('<div class="ov-panel">', unsafe_allow_html=True)
         st.markdown("**Risk distribution**")
         dist = snap.get("residual_distribution") or {}
         total = sum(dist.values()) or 1
+        dist_html = []
         for band in ("Critical", "High", "Moderate", "Low"):
             n = int(dist.get(band, 0))
             pct = min(100, round(100 * n / total))
-            st.markdown(
+            dist_html.append(
                 f'<div class="ov-dist-row"><span>{_e(band)}</span>'
                 f'<div class="ov-bar {band.lower()}"><span style="width:{pct}%">'
-                f'</span></div><b>{n}</b></div>',
-                unsafe_allow_html=True)
-            if n and st.button(f"View {band}", key=f"ov_band_{band}",
-                               width="stretch"):
-                st.session_state["ov_filter_band"] = band
-                st.session_state.pop("ov_filter_ids", None)
-                if PAGES.get("risks"):
-                    st.switch_page(PAGES["risks"])
+                f'</span></div><b>{n}</b></div>')
+        st.markdown("".join(dist_html), unsafe_allow_html=True)
+        short_band = {"Critical": "Critical", "High": "High",
+                      "Moderate": "Moderate", "Low": "Low"}
+        bcols = st.columns(4)
+        for band, col in zip(("Critical", "High", "Moderate", "Low"), bcols):
+            n = int(dist.get(band, 0))
+            with col:
+                label = short_band[band]
+                if n and st.button(label, key=f"ov_band_{band}",
+                                   help=f"Filter register to {band} ({n})",
+                                   width="stretch"):
+                    st.session_state["ov_filter_band"] = band
+                    st.session_state.pop("ov_filter_ids", None)
+                    if PAGES.get("risks"):
+                        st.switch_page(PAGES["risks"])
 
         st.markdown("**Material residual risks**")
         mat = snap.get("material")
         if mat is None or mat.empty:
             st.markdown(empty_state(
                 "No High or Critical residual risks.",
-                "Material items appear here when residual band is High or Critical."),
+                "Material items appear when residual band is High or Critical."),
                 unsafe_allow_html=True)
         else:
             body = []
             for _, r in mat.head(6).iterrows():
                 title = str(r.get("title") or "")
-                if len(title) > 64:
-                    title = title[:61] + "…"
+                if len(title) > 56:
+                    title = title[:53] + "…"
+                owner = r.get("owner")
+                try:
+                    if owner is None or pd.isna(owner):
+                        owner = "—"
+                except (TypeError, ValueError):
+                    owner = owner or "—"
                 sev = pill(str(r.get("residual_band") or ""),
                            SEVERITY_KIND.get(str(r.get("residual_band")), "na"))
                 body.append(
                     f"<tr><td class='risk'>{_e(title)}"
                     f"<span class='ref'>{_e(r['id'])}</span></td>"
                     f"<td>{sev}</td>"
-                    f"<td>{_e(r.get('owner') or '—')}</td></tr>")
+                    f"<td>{_e(str(owner))}</td></tr>")
             st.markdown(
                 "<table class='ov-mat'><thead><tr>"
                 "<th>Risk / Issue</th><th>Severity</th><th>Accountable Owner</th>"
                 "</tr></thead><tbody>"
                 + "".join(body) + "</tbody></table>",
                 unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
 
 
 def _attention_section(snap: dict) -> None:
@@ -394,7 +417,6 @@ def _attention_section(snap: dict) -> None:
             unsafe_allow_html=True)
         return
 
-    st.markdown('<div class="ov-panel">', unsafe_allow_html=True)
     head = ("<table class='ov-attn' role='table'><thead><tr>"
             "<th>Issue</th><th>Type</th><th>Severity</th>"
             "<th>Accountable Owner</th><th>Status</th>"
@@ -403,7 +425,6 @@ def _attention_section(snap: dict) -> None:
     options = {}
     for _, r in attn.head(12).iterrows():
         issue = str(r["issue"] or "")
-        # Split "ID — title" so reference is secondary
         if " — " in issue:
             ref, title = issue.split(" — ", 1)
         else:
@@ -425,18 +446,17 @@ def _attention_section(snap: dict) -> None:
     c1, c2 = st.columns([3, 1])
     with c1:
         pick = st.selectbox(
-            "Action — open record",
+            "Open selected record",
             ["—"] + list(options),
             key="ov_attn_pick")
     with c2:
-        go = st.button("Go", key="ov_attn_go", width="stretch")
+        go = st.button("Open", key="ov_attn_go", width="stretch")
     if pick != "—" and go:
         page, rid = options[pick]
         if page == "risks" and rid:
             st.session_state["rk_selected"] = rid
         if PAGES.get(page):
             st.switch_page(PAGES[page])
-    st.markdown("</div>", unsafe_allow_html=True)
 
 
 def _kri_and_regulatory(snap: dict) -> None:
@@ -446,7 +466,6 @@ def _kri_and_regulatory(snap: dict) -> None:
         unsafe_allow_html=True)
     left, right = st.columns([1.2, 1], gap="medium")
     with left:
-        st.markdown('<div class="ov-panel">', unsafe_allow_html=True)
         st.markdown("**KRI trends**")
         note = snap.get("kri_note") or ""
         if note:
@@ -488,7 +507,7 @@ def _kri_and_regulatory(snap: dict) -> None:
                                           labelColor="#5c6b7a")),
                     tooltip=[idx, "value"],
                 ).properties(height=180).configure_view(strokeWidth=0)
-                st.altair_chart(chart, use_container_width=True)
+                st.altair_chart(chart, width="stretch")
         elif breaches is None or breaches.empty:
             st.markdown(empty_state(
                 "No KRI breaches or observation history.",
@@ -497,10 +516,8 @@ def _kri_and_regulatory(snap: dict) -> None:
         if st.button("Open KRI Monitoring", key="ov_kri_go"):
             if PAGES.get("kri"):
                 st.switch_page(PAGES["kri"])
-        st.markdown("</div>", unsafe_allow_html=True)
 
     with right:
-        st.markdown('<div class="ov-panel">', unsafe_allow_html=True)
         st.markdown("**Regulatory intelligence**")
         changes = snap.get("changes")
         apps = snap.get("applicability_pending")
@@ -542,7 +559,6 @@ def _kri_and_regulatory(snap: dict) -> None:
             if st.button("Change Impact", key="ov_ci_go"):
                 if PAGES.get("change_impact"):
                     st.switch_page(PAGES["change_impact"])
-        st.markdown("</div>", unsafe_allow_html=True)
 
 
 # --- tour / demo ------------------------------------------------------------------

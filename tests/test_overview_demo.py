@@ -55,7 +55,8 @@ def test_overview_heat_html_is_matrix_not_raw_ids(monkeypatch):
     assert "L1" in html and "I5" in html
     # Counts only in cells — RSK ids may appear in title= tooltips, not as cell body soup
     assert ">RSK-" not in html
-    assert "background:" in html  # inline styles (CSS-class independent)
+    assert "background-color:" in html  # inline styles (CSS-class independent)
+    assert html.count("<td class=\"cell\"") == 25
 
 
 def test_demo_mode_isolates_and_reset_spares_live(_stores):

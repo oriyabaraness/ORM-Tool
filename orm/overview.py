@@ -259,20 +259,34 @@ def _attention_queue(*, outside, kri_breaches, weak, overdue, high_inc) -> pd.Da
     rows = []
     seen = set()
 
+    def _clean(v, fallback="—"):
+        if v is None:
+            return fallback
+        try:
+            if pd.isna(v):
+                return fallback
+        except (TypeError, ValueError):
+            pass
+        s = str(v).strip()
+        if not s or s.lower() in ("nan", "none", "nat"):
+            return fallback
+        return s
+
     def add(key, issue, category, severity, owner, when, status, page, record_id):
         if key in seen:
             return
         seen.add(key)
+        sev = _clean(severity, "—")
         sev_rank = {"Critical": 0, "High": 1, "P1": 0, "P2": 1, "Red": 0,
-                    "Amber": 2, "Moderate": 3, "Medium": 3}.get(severity, 4)
+                    "Amber": 2, "Moderate": 3, "Medium": 3}.get(sev, 4)
         rows.append({
             "key": key,
             "issue": issue,
             "category": category,
-            "severity": severity,
-            "owner": owner or "—",
-            "when": when or "—",
-            "status": status or "open",
+            "severity": sev,
+            "owner": _clean(owner),
+            "when": _clean(when),
+            "status": _clean(status, "open"),
             "page": page,
             "record_id": record_id,
             "_rank": sev_rank,
@@ -292,7 +306,7 @@ def _attention_queue(*, outside, kri_breaches, weak, overdue, high_inc) -> pd.Da
                 "KRI breach", k.get("rag") or "Red",
                 k.get("metric_owner") or k.get("owner"),
                 k.get("period") or k.get("observed_at"),
-                k.get("rag") or "breach", "kri", kid)
+                "Threshold breach", "kri", kid)
 
     if weak is not None and not weak.empty:
         for _, c in weak.iterrows():
