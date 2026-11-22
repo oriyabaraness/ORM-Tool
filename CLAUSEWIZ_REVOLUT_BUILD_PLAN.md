@@ -111,7 +111,7 @@ Status reflects **production today**, with a note where local uncommitted code a
 | G | KRI monitoring and thresholds | **Missing in prod** · **Implemented locally** | Local: 5 KRIs, 30 readings, green/amber/red by direction. | Ship KRI tabs + report breaches. |
 | H | Incident tracking | **Shipped** | Full lifecycle (Detected→Closed), RCA, loss events, remediation validation, reporting assessment, `INC-DEMO-CLOUD` walkthrough, Incidents & Loss nav. | Keep demo synthetic; never auto-notify. |
 | I | Business impact and resilience | **Shipped** | IBS inventory, dependency graph, BIA (RTO/RPO/tolerance separate), scenarios A–E + `SCN-DEMO-CLOUD` arrangement comparison, concentration hypotheses, Operational Resilience nav. | Never invent approved tolerances; keep scenarios assumption-based. |
-| J | Management risk reporting | **Partially implemented** (prod audit pack) · **local risk report** | Prod: Excel/PDF audit pack. Local: heat map, outside appetite, KRI breaches, incidents/losses, overdue actions, weak controls, unvalidated links; Excel/PDF with synthetic watermark. | Ship Risk report page. |
+| J | Management risk reporting | **Shipped** | Risk report + Executive report (period filters, movement from audit log, FACTS/ANALYSIS/RECOMMENDATIONS, committee actions, provenance, PDF/HTML/Excel, synthetic watermark). Demo title: Hypothetical Digital Payments Entity. | Keep narratives evidence-linked; never claim full compliance. |
 
 ---
 

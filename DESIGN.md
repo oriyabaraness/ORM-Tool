@@ -73,6 +73,7 @@ Primary navigation (left rail on desktop, in this order):
 | **Incidents & Loss** | Operational incident lifecycle, loss events, root-cause investigation, remediation with independent validation, and regulatory reporting assessment. Synthetic demo labelled; no automatic notification decisions. |
 | **Operational Resilience** | Important business services, dependency mapping, BIA, and severe-but-plausible scenario analysis with deterministic impact-tolerance testing. Synthetic; never invents approved tolerances. |
 | **Risk report** | Management risk report export (Excel/PDF) with citations and synthetic watermark. |
+| **Executive report** | Period-filtered executive pack: dashboard, risk movement, FACTS/ANALYSIS/RECOMMENDATIONS narrative, committee actions, evidence links, PDF/HTML/Excel export. Synthetic watermark when demo data is used. |
 | **Regulatory Intelligence** | Source library, obligation explorer, cross-jurisdiction requirement comparison, applicability review, and map-to-risk suggestions. Exact quotes stay separate from machine interpretation. |
 | ~~Market context~~ | Switched off (macro data is not part of the controls workflow); code kept in `reference_views.py`. |
 
