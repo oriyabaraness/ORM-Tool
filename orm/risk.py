@@ -149,12 +149,15 @@ CREATE INDEX IF NOT EXISTS ix_app_doc ON applicability(document_id);
 
 TABLES = ("business_service", "risk", "risk_obligation", "control", "risk_control",
           "control_test", "appetite", "kri", "kri_reading", "incident",
-          "incident_link", "action", "applicability")
+          "incident_link", "action", "applicability", "appetite_statement",
+          "kri_risk", "kri_observation", "kri_escalation")
 KEYS = {"risk_obligation": ("risk_id", "okey"), "risk_control": ("risk_id", "control_id"),
         "kri_reading": ("kri_id", "period"), "appetite": ("category_id",),
-        "incident_link": ("incident_id", "kind", "target_id")}
+        "incident_link": ("incident_id", "kind", "target_id"),
+        "kri_risk": ("kri_id", "risk_id")}
 _TIMESTAMPED = {"business_service", "risk", "risk_obligation", "control", "control_test",
-                "appetite", "kri", "incident", "action", "applicability"}
+                "appetite", "kri", "incident", "action", "applicability",
+                "appetite_statement", "kri_escalation"}
 
 APPLICABILITY_STATUSES = (
     "not_yet_assessed",
@@ -230,10 +233,93 @@ _CONTROL_EXTRA = {
     "exceptions": "TEXT",
     "remediation_status": "TEXT",
 }
+_KRI_EXTRA = {
+    "description": "TEXT",
+    "business_process": "TEXT",
+    "legal_entity": "TEXT",
+    "risk_owner": "TEXT",
+    "metric_owner": "TEXT",
+    "formula": "TEXT",
+    "collection_frequency": "TEXT",
+    "measurement_period": "TEXT",
+    "baseline": "REAL",
+    "warning_threshold": "REAL",   # alias of amber when set
+    "breach_threshold": "REAL",    # alias of the red boundary
+    "leading_lagging": "TEXT",     # leading|lagging|mixed
+    "appetite_statement_id": "TEXT",
+    "escalation_rules": "TEXT",
+    "reporting_audience": "TEXT",
+    "exclusions_json": "TEXT",
+    "last_validated_at": "TEXT",
+    "numerator_label": "TEXT",
+    "denominator_label": "TEXT",
+}
+
+_KRI_APPETITE_SCHEMA = """
+CREATE TABLE IF NOT EXISTS appetite_statement (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    statement TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'appetite',  -- appetite|tolerance|service_impact
+    category_id TEXT,
+    legal_entity TEXT,
+    business_process TEXT,
+    approved_by TEXT, approved_at TEXT,
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at TEXT NOT NULL, created_by TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL, updated_by TEXT NOT NULL DEFAULT '',
+    provenance TEXT NOT NULL DEFAULT 'user',
+    validation_status TEXT NOT NULL DEFAULT 'draft',
+    is_synthetic INTEGER NOT NULL DEFAULT 0);
+
+CREATE TABLE IF NOT EXISTS kri_risk (
+    kri_id TEXT NOT NULL REFERENCES kri(id),
+    risk_id TEXT NOT NULL REFERENCES risk(id),
+    PRIMARY KEY (kri_id, risk_id));
+
+CREATE TABLE IF NOT EXISTS kri_observation (
+    id TEXT PRIMARY KEY,
+    kri_id TEXT NOT NULL REFERENCES kri(id),
+    observed_at TEXT NOT NULL,
+    period TEXT NOT NULL,
+    numerator REAL,
+    denominator REAL,
+    value REAL,
+    unit TEXT,
+    source TEXT NOT NULL DEFAULT 'manual',  -- manual|csv|database|synthetic
+    note TEXT,
+    entered_by TEXT, entered_at TEXT NOT NULL,
+    is_synthetic INTEGER NOT NULL DEFAULT 0);
+
+CREATE TABLE IF NOT EXISTS kri_escalation (
+    id TEXT PRIMARY KEY,
+    kri_id TEXT NOT NULL REFERENCES kri(id),
+    observation_id TEXT,
+    period TEXT NOT NULL,
+    status_rag TEXT NOT NULL,              -- Amber|Red
+    value REAL,
+    triggered_at TEXT NOT NULL,
+    related_risks TEXT,                    -- JSON list of risk ids
+    owner TEXT,
+    recommendation TEXT,
+    commentary TEXT,
+    ack_status TEXT NOT NULL DEFAULT 'open',  -- open|acknowledged|actioned|closed
+    acknowledged_by TEXT, acknowledged_at TEXT,
+    action_id TEXT,
+    resolution_note TEXT,
+    created_at TEXT NOT NULL, created_by TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL, updated_by TEXT NOT NULL DEFAULT '',
+    provenance TEXT NOT NULL DEFAULT 'user',
+    validation_status TEXT NOT NULL DEFAULT 'draft',
+    is_synthetic INTEGER NOT NULL DEFAULT 0);
+
+CREATE INDEX IF NOT EXISTS ix_kri_obs ON kri_observation(kri_id, period);
+CREATE INDEX IF NOT EXISTS ix_kri_esc ON kri_escalation(kri_id, ack_status);
+"""
 
 
 def migrate(conn: sqlite3.Connection) -> None:
-    """Add RCSA columns if missing. Never drops or renames existing columns."""
+    """Add RCSA/KRI columns and tables if missing. Never drops data."""
     def add(table: str, cols: dict[str, str]) -> None:
         have = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
         for name, decl in cols.items():
@@ -241,6 +327,8 @@ def migrate(conn: sqlite3.Connection) -> None:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
     add("risk", _RISK_EXTRA)
     add("control", _CONTROL_EXTRA)
+    add("kri", _KRI_EXTRA)
+    conn.executescript(_KRI_APPETITE_SCHEMA)
 
 
 @contextmanager

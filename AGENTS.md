@@ -7,10 +7,11 @@
 - **Controls layer:** obligations (`orm/obligations.py`), control library
   (`orm/controls.py`), reviews and audit log (`orm/state.py`), coverage and
   audit pack (`orm/audit.py`); screens in `controls_views.py`.
-- **Risk + RCSA + Regulatory Intelligence:** `orm/risk.py`, `orm/rcsa.py`,
-  `orm/demo_data.py`, `orm/risk_report.py`, `orm/regulatory_intel.py`; screens
-  in `risk_views.py`, `rcsa_views.py` and `regulatory_views.py`. Synthetic demo
-  data only; residual risk is explicit (never auto-reduced from controls);
+- **Risk + RCSA + KRI + Regulatory Intelligence:** `orm/risk.py`, `orm/rcsa.py`,
+  `orm/kri_appetite.py`, `orm/demo_data.py`, `orm/risk_report.py`,
+  `orm/regulatory_intel.py`; screens in `risk_views.py`, `rcsa_views.py`,
+  `kri_views.py` and `regulatory_views.py`. Synthetic demo data only; residual
+  risk is explicit; KRI values come from observations (not hard-coded in UI);
   never invent citations.
 - **Logic vs UI:** data, tagging and matching live in `orm/`; UI files only
   render what `orm.queries` / `orm.regulatory_intel` returns.
