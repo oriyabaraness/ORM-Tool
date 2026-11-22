@@ -7,8 +7,11 @@
 - **Controls layer:** obligations (`orm/obligations.py`), control library
   (`orm/controls.py`), reviews and audit log (`orm/state.py`), coverage and
   audit pack (`orm/audit.py`); screens in `controls_views.py`.
+- **Risk + Regulatory Intelligence:** `orm/risk.py`, `orm/demo_data.py`,
+  `orm/risk_report.py`, `orm/regulatory_intel.py`; screens in `risk_views.py`
+  and `regulatory_views.py`. Synthetic demo data only; never invent citations.
 - **Logic vs UI:** data, tagging and matching live in `orm/`; UI files only
-  render what `orm.queries` returns.
+  render what `orm.queries` / `orm.regulatory_intel` returns.
 - **Index:** build with `python orm_pipeline.py build --fetch`; check with
   `python orm_pipeline.py status`.
 - **Tests:** `python -m pytest tests` must pass before committing.

@@ -123,6 +123,20 @@ CREATE TABLE IF NOT EXISTS action (
     status TEXT NOT NULL DEFAULT 'open',                -- open|in_progress|done
     closed_at TEXT, closure_evidence TEXT,{_COMMON});
 
+CREATE TABLE IF NOT EXISTS applicability (
+    id TEXT PRIMARY KEY,
+    document_id TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'not_yet_assessed',
+    legal_entity TEXT NOT NULL DEFAULT '',
+    license_perimeter TEXT NOT NULL DEFAULT '',
+    product_service TEXT NOT NULL DEFAULT '',
+    jurisdiction TEXT NOT NULL DEFAULT '',
+    reasoning TEXT NOT NULL DEFAULT '',
+    reviewer TEXT NOT NULL DEFAULT '',
+    review_date TEXT,
+    supporting_reference TEXT NOT NULL DEFAULT '',
+    {_COMMON});
+
 CREATE TABLE IF NOT EXISTS risk_audit_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, actor TEXT,
     action TEXT NOT NULL, table_name TEXT NOT NULL, object_id TEXT NOT NULL,
@@ -130,16 +144,32 @@ CREATE TABLE IF NOT EXISTS risk_audit_log (
 
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
 CREATE INDEX IF NOT EXISTS ix_rlog_obj ON risk_audit_log(table_name, object_id);
+CREATE INDEX IF NOT EXISTS ix_app_doc ON applicability(document_id);
 """
 
 TABLES = ("business_service", "risk", "risk_obligation", "control", "risk_control",
           "control_test", "appetite", "kri", "kri_reading", "incident",
-          "incident_link", "action")
+          "incident_link", "action", "applicability")
 KEYS = {"risk_obligation": ("risk_id", "okey"), "risk_control": ("risk_id", "control_id"),
         "kri_reading": ("kri_id", "period"), "appetite": ("category_id",),
         "incident_link": ("incident_id", "kind", "target_id")}
 _TIMESTAMPED = {"business_service", "risk", "risk_obligation", "control", "control_test",
-                "appetite", "kri", "incident", "action"}
+                "appetite", "kri", "incident", "action", "applicability"}
+
+APPLICABILITY_STATUSES = (
+    "not_yet_assessed",
+    "potentially_applicable",
+    "confirmed_applicable",
+    "confirmed_not_applicable",
+    "requires_interpretation",
+)
+APPLICABILITY_LABEL = {
+    "not_yet_assessed": "Not yet assessed",
+    "potentially_applicable": "Potentially applicable",
+    "confirmed_applicable": "Confirmed applicable",
+    "confirmed_not_applicable": "Confirmed not applicable",
+    "requires_interpretation": "Requires legal/compliance interpretation",
+}
 
 EVENT_TYPES = (
     "Internal fraud", "External fraud", "Employment practices and workplace safety",

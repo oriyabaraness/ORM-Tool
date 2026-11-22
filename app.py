@@ -27,7 +27,8 @@ if not sys.path or os.path.abspath(sys.path[0] or ".") != _APP_DIR:
 # Two sessions running at once share sys.modules: without the lock, one can
 # delete orm.match while the other is half-way through importing it. The lock
 # lives on `sys` because this file is re-executed on every run.
-_FRESH = ("orm", "orm_compare", "ui_theme", "controls_views", "risk_views")
+_FRESH = ("orm", "orm_compare", "ui_theme", "controls_views", "risk_views",
+          "regulatory_views")
 with sys.__dict__.setdefault("_clausewiz_import_lock", threading.RLock()):
     for _name in list(sys.modules):
         if _name in _FRESH or _name.startswith("orm."):
@@ -36,6 +37,7 @@ with sys.__dict__.setdefault("_clausewiz_import_lock", threading.RLock()):
     import controls_views  # noqa: E402
     import orm_compare  # noqa: E402
     import reference_views  # noqa: E402
+    import regulatory_views  # noqa: E402
     import risk_views  # noqa: E402
 
 st.set_page_config(page_title=APP_NAME,
@@ -73,6 +75,9 @@ PAGES = {
                      icon=":material/report:", url_path="risks"),
     "risk_report": st.Page(risk_views.page_report, title="Risk report",
                            icon=":material/summarize:", url_path="risk-report"),
+    "regulatory": st.Page(regulatory_views.page_regulatory_intelligence,
+                          title="Regulatory Intelligence",
+                          icon=":material/policy:", url_path="regulatory"),
     "sources": st.Page(reference_views.page_sources, title="Sources",
                        icon=":material/description:", url_path="sources"),
     # Market context (reference_views.page_market: regional map, FX reserves,
@@ -82,12 +87,13 @@ PAGES = {
 orm_compare.PAGES = PAGES
 controls_views.PAGES = PAGES
 risk_views.PAGES = PAGES
+regulatory_views.PAGES = PAGES
 
 nav = st.navigation({
     "Compare": [PAGES["home"], PAGES["compare"], PAGES["coverage"], PAGES["gaps"],
                 PAGES["deadlines"], PAGES["changes"]],
     "Controls": [PAGES["obligations"], PAGES["controls"], PAGES["audit"]],
-    "Risk": [PAGES["risks"], PAGES["risk_report"]],
+    "Risk": [PAGES["risks"], PAGES["risk_report"], PAGES["regulatory"]],
     "Reference": [PAGES["sources"]],
 }, position="sidebar")
 st.sidebar.markdown(

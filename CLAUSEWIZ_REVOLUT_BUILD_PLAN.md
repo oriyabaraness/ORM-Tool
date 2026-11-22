@@ -104,7 +104,7 @@ Status reflects **production today**, with a note where local uncommitted code a
 |---|---|---|---|---|
 | A | Regulatory obligation extraction | **Implemented but unreliable** | 6,076 rule-based obligations, 0 human-reviewed, 0 LLM-verified. Actor and scope detection are heuristic. | For the demo, validate linked obligations from BOI 350/355/362/364/366. Optionally run `--llm` on those directives (needs the owner's key) and commit the verified cache. |
 | B | Directive comparison across jurisdictions | **Implemented** | Compare screen, matches, confirm/reject, gaps. Limits: Turkey has no text; Jordan 83/91. | None for the slice. |
-| C | Regulatory applicability assessment | **Missing** | Only entity hints in `review._entities`. No "does this directive apply to us" record. Schema planned (`applicability`); **not coded yet**. | One `applicability` record per directive + selector on Risk register. |
+| C | Regulatory applicability assessment | **Implemented** (Regulatory Intelligence panel D) | `applicability` table in `orm_risk.db`; statuses, entity/perimeter/product, reasoning, reviewer, date; AI suggests questions only. | Polish: surface status on Compare/Sources later if needed. |
 | D | Operational risk identification | **Missing in prod** · **Partially implemented locally** | Taxonomy ≠ risk register. Local: 4 seeded synthetic risks with owners, Basel event types, causes/effects. | Commit/push the local Risk register screen. |
 | E | Inherent and residual risk scoring | **Missing in prod** · **Implemented locally** | Local 5×5 scoring, weakest-key-control residual, override with mandatory rationale, unit-tested. | Ship `orm/risk.py` scoring + UI. |
 | F | Control mapping and effectiveness | **Partially implemented** (prod library/upload) · **local adds design/operating tests** | Prod: 45-control library, suggestions, bank upload, text-similarity coverage. Local: `control`, `risk_control`, `control_test` with ratings. | Ship local control-test layer; keep library IDs so Controls screen still works. |
@@ -293,10 +293,11 @@ Each step is one small, reviewable commit. Tests pass before each push.
 | 5 | Incidents and remediation actions. | same | **Coded locally, uncommitted** |
 | 6 | Resilience: business services, impact tolerance on incidents. | same | **Coded locally, uncommitted** |
 | 7 | Management report plus Excel/PDF export. | `orm/risk_report.py`, `risk_views.py`, tests | **Coded locally, uncommitted** |
-| 8 | Hooks: "Linked risks" on Obligations and Compare (read-only). | `controls_views.py`, `orm_compare.py` | **Not started** |
-| 9 | Applicability decision per directive. | `orm/risk.py`, `risk_views.py` | **Not started** |
-| 10 (optional) | AI suggestion "risks this obligation may create", offline, quote-verified. | `orm/llm_risk.py` | **Not started** |
-| 11 | Docs: DESIGN.md IA, README, AGENTS.md. | docs | **Not started** (this plan file exists) |
+| 8 | Hooks: "Linked risks" on Obligations and Compare (read-only). | `controls_views.py`, `orm_compare.py` | **Not started** (RI panel E links from obligations) |
+| 9 | Applicability decision per directive. | `orm/risk.py`, `orm/regulatory_intel.py`, `regulatory_views.py` | **Done** |
+| 9b | Regulatory Intelligence workspace (source library, explorer, comparison, mapping). | `orm/regulatory_intel.py`, `regulatory_views.py`, tests | **Done** |
+| 10 (optional) | AI suggestion "risks this obligation may create", offline, quote-verified. | `orm/llm_risk.py` | **Not started** (rule-based suggestions ship in RI panel E) |
+| 11 | Docs: DESIGN.md IA, README, AGENTS.md. | docs | **Partial** (DESIGN + AGENTS updated) |
 
 **Recommended next action:** after user "go", commit the local slice (steps 1–7)
 as one reviewable commit (or split data layer / UI / report if preferred), run

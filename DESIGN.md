@@ -67,6 +67,9 @@ Primary navigation (left rail on desktop, in this order):
 | **Obligations** | Every duty as a checklist item (who, what, deadline, frequency, evidence, source). Approve, correct, reject; pick the control. |
 | **Controls** | Control library with obligations answered per country; regulation → control → evidence chain per directive. |
 | **Audit readiness** | Upload the bank's controls, coverage, audit pack (Excel/PDF), history as of any date. |
+| **Risk register** | Synthetic operational risk register (inherent/residual, controls, KRIs, incidents). Clearly labelled demo data. |
+| **Risk report** | Management risk report export (Excel/PDF) with citations and synthetic watermark. |
+| **Regulatory Intelligence** | Source library, obligation explorer, cross-jurisdiction requirement comparison, applicability review, and map-to-risk suggestions. Exact quotes stay separate from machine interpretation. |
 | ~~Market context~~ | Switched off (macro data is not part of the controls workflow); code kept in `reference_views.py`. |
 
 Global top bar, visible on every screen:
