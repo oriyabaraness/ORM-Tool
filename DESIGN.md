@@ -62,7 +62,7 @@ Primary navigation (left rail, sectioned):
 | Section | Items |
 |---|---|
 | **Overview** | Operational risk snapshot, heat map, KRI trends, priority actions, regulatory changes, recent events. |
-| **Regulatory Intelligence** | Regulatory Intelligence, Obligations, Sources. |
+| **Regulatory Intelligence** | Regulatory Intelligence, Regulatory Change Impact, Obligations, Sources. |
 | **Compare** | Home (country × category entry), Compare, Coverage, Gaps, Deadlines, Changes. |
 | **Risk Register** | Risk register. |
 | **Controls & RCSA** | Controls, RCSA, Audit readiness. |
@@ -92,6 +92,7 @@ Primary navigation (left rail, sectioned):
 | **Risk report** | Management risk report export (Excel/PDF). |
 | **Executive report** | Period-filtered executive pack with FACTS/ANALYSIS/RECOMMENDATIONS. |
 | **Regulatory Intelligence** | Source library, obligation explorer, applicability, map-to-risk. |
+| **Regulatory Change Impact** | Compare two document versions; map changed clauses to risks/controls; draft review actions. Textual change ≠ materiality or noncompliance. |
 | ~~Market context~~ | Switched off; code kept in `reference_views.py`. |
 
 Global top bar, visible on every screen:

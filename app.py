@@ -18,12 +18,14 @@ if not sys.path or os.path.abspath(sys.path[0] or ".") != _APP_DIR:
 
 _FRESH = ("orm", "orm_compare", "ui_theme", "controls_views", "risk_views",
           "regulatory_views", "rcsa_views", "kri_views", "incident_views",
-          "resilience_views", "exec_report_views", "overview_views")
+          "resilience_views", "exec_report_views", "overview_views",
+          "change_impact_views")
 with sys.__dict__.setdefault("_clausewiz_import_lock", threading.RLock()):
     for _name in list(sys.modules):
         if _name in _FRESH or _name.startswith("orm."):
             del sys.modules[_name]
     from ui_theme import APP_NAME, apply_theme  # noqa: E402
+    import change_impact_views  # noqa: E402
     import controls_views  # noqa: E402
     import exec_report_views  # noqa: E402
     import incident_views  # noqa: E402
@@ -94,6 +96,10 @@ PAGES = {
     "regulatory": st.Page(regulatory_views.page_regulatory_intelligence,
                           title="Regulatory Intelligence",
                           icon=":material/policy:", url_path="regulatory"),
+    "change_impact": st.Page(change_impact_views.page_change_impact,
+                             title="Regulatory Change Impact",
+                             icon=":material/difference:",
+                             url_path="change-impact"),
     "sources": st.Page(reference_views.page_sources, title="Sources",
                        icon=":material/description:", url_path="sources"),
 }
@@ -109,12 +115,14 @@ resilience_views.PAGES = PAGES
 exec_report_views.PAGES = PAGES
 regulatory_views.PAGES = PAGES
 overview_views.PAGES = PAGES
+change_impact_views.PAGES = PAGES
 
 # Sidebar IA follows the operational risk lifecycle (DESIGN.md).
 nav = st.navigation({
     "Overview": [PAGES["overview"]],
     "Regulatory Intelligence": [
-        PAGES["regulatory"], PAGES["obligations"], PAGES["sources"],
+        PAGES["regulatory"], PAGES["change_impact"], PAGES["obligations"],
+        PAGES["sources"],
     ],
     "Compare": [
         PAGES["home"], PAGES["compare"], PAGES["coverage"], PAGES["gaps"],

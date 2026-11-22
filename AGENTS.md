@@ -12,15 +12,17 @@
 - **Risk + RCSA + KRI + Incidents + Resilience + Executive report + Regulatory
   Intelligence:** `orm/risk.py`, `orm/rcsa.py`, `orm/kri_appetite.py`,
   `orm/incident_mgmt.py`, `orm/resilience.py`, `orm/exec_report.py`,
-  `orm/demo_data.py`, `orm/risk_report.py`, `orm/regulatory_intel.py`; screens
-  in `risk_views.py`, `rcsa_views.py`, `kri_views.py`, `incident_views.py`,
-  `resilience_views.py`, `exec_report_views.py` and `regulatory_views.py`.
+  `orm/change_impact.py`, `orm/demo_data.py`, `orm/risk_report.py`,
+  `orm/regulatory_intel.py`; screens in `risk_views.py`, `rcsa_views.py`,
+  `kri_views.py`, `incident_views.py`, `resilience_views.py`,
+  `exec_report_views.py`, `change_impact_views.py` and `regulatory_views.py`.
   Synthetic demo data only; residual risk is explicit; KRI values come from
   observations (not hard-coded in UI); incident facts / estimates / hypotheses
   are labelled; resilience scenarios use deterministic assumptions; executive
   narratives separate FACTS / ANALYSIS / RECOMMENDATIONS and never invent
   movement reasons or compliance conclusions; never invent citations, approved
-  impact tolerances, or auto-decide regulatory notifications.
+  impact tolerances, or auto-decide regulatory notifications; regulatory change
+  impact treats text diffs as review hypotheses, never automatic noncompliance.
 - **Logic vs UI:** data, tagging and matching live in `orm/`; UI files only
   render what `orm.queries` / `orm.regulatory_intel` returns.
 - **Index:** build with `python orm_pipeline.py build --fetch`; check with

@@ -153,7 +153,9 @@ TABLES = ("business_service", "risk", "risk_obligation", "control", "risk_contro
           "kri_risk", "kri_observation", "kri_escalation", "incident_transition",
           "incident_loss", "incident_rca", "incident_reporting",
           "service_dependency", "service_bia", "resilience_scenario",
-          "scenario_option", "resilience_action")
+          "scenario_option", "resilience_action",
+          "reg_doc_family", "reg_doc_version", "reg_doc_clause",
+          "change_impact_action")
 KEYS = {"risk_obligation": ("risk_id", "okey"), "risk_control": ("risk_id", "control_id"),
         "kri_reading": ("kri_id", "period"), "appetite": ("category_id",),
         "incident_link": ("incident_id", "kind", "target_id"),
@@ -162,7 +164,8 @@ KEYS = {"risk_obligation": ("risk_id", "okey"), "risk_control": ("risk_id", "con
 _TIMESTAMPED = {"business_service", "risk", "risk_obligation", "control", "control_test",
                 "appetite", "kri", "incident", "action", "applicability",
                 "appetite_statement", "kri_escalation", "incident_loss",
-                "incident_reporting", "resilience_scenario", "resilience_action"}
+                "incident_reporting", "resilience_scenario", "resilience_action",
+                "reg_doc_version", "change_impact_action"}
 
 APPLICABILITY_STATUSES = (
     "not_yet_assessed",
@@ -531,9 +534,62 @@ CREATE INDEX IF NOT EXISTS ix_svc_dep ON service_dependency(service_id, layer);
 CREATE INDEX IF NOT EXISTS ix_scn_opt ON scenario_option(scenario_id, sort_order);
 """
 
+_CHANGE_IMPACT_SCHEMA = """
+CREATE TABLE IF NOT EXISTS reg_doc_family (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    publisher_note TEXT,                 -- must state fictional when synthetic
+    topic TEXT,
+    is_synthetic INTEGER NOT NULL DEFAULT 0);
+
+CREATE TABLE IF NOT EXISTS reg_doc_version (
+    id TEXT PRIMARY KEY,
+    family_id TEXT NOT NULL REFERENCES reg_doc_family(id),
+    version_label TEXT NOT NULL,
+    published_at TEXT,
+    summary TEXT,
+    is_synthetic INTEGER NOT NULL DEFAULT 0,
+    provenance TEXT NOT NULL DEFAULT 'user',
+    created_at TEXT NOT NULL, created_by TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL, updated_by TEXT NOT NULL DEFAULT '');
+
+CREATE TABLE IF NOT EXISTS reg_doc_clause (
+    id TEXT PRIMARY KEY,
+    version_id TEXT NOT NULL REFERENCES reg_doc_version(id),
+    clause_ref TEXT NOT NULL,
+    seq INTEGER NOT NULL,
+    text TEXT NOT NULL,
+    is_synthetic INTEGER NOT NULL DEFAULT 0);
+
+CREATE TABLE IF NOT EXISTS change_impact_action (
+    id TEXT PRIMARY KEY,
+    family_id TEXT,
+    version_a_id TEXT,
+    version_b_id TEXT,
+    clause_ref TEXT,
+    change_kind TEXT,
+    title TEXT NOT NULL,
+    owner TEXT,
+    priority TEXT,
+    due_at TEXT,
+    status TEXT NOT NULL DEFAULT 'open',
+    related_risk_id TEXT,
+    related_control_id TEXT,
+    rationale TEXT,
+    requires_human_review INTEGER NOT NULL DEFAULT 1,
+    is_synthetic INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL, created_by TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL, updated_by TEXT NOT NULL DEFAULT '',
+    provenance TEXT NOT NULL DEFAULT 'user',
+    validation_status TEXT NOT NULL DEFAULT 'draft');
+
+CREATE INDEX IF NOT EXISTS ix_reg_ver ON reg_doc_version(family_id);
+CREATE INDEX IF NOT EXISTS ix_reg_clause ON reg_doc_clause(version_id, seq);
+"""
+
 
 def migrate(conn: sqlite3.Connection) -> None:
-    """Add RCSA/KRI/incident/resilience columns and tables if missing. Never drops data."""
+    """Add RCSA/KRI/incident/resilience/change-impact columns and tables if missing."""
     def add(table: str, cols: dict[str, str]) -> None:
         have = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
         for name, decl in cols.items():
@@ -548,6 +604,7 @@ def migrate(conn: sqlite3.Connection) -> None:
     conn.executescript(_KRI_APPETITE_SCHEMA)
     conn.executescript(_INCIDENT_MGMT_SCHEMA)
     conn.executescript(_RESILIENCE_SCHEMA)
+    conn.executescript(_CHANGE_IMPACT_SCHEMA)
 
 
 @contextmanager

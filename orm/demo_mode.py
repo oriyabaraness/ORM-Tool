@@ -118,7 +118,8 @@ def reset(session: dict) -> None:
 def ensure_seeded(*, force: bool = False, index_conn=None) -> dict:
     """Populate the demo risk DB from synthetic modules. No paid APIs."""
     os.makedirs(os.path.dirname(DEMO_DB_PATH), exist_ok=True)
-    from . import demo_data, exec_report, incident_mgmt, kri_appetite, resilience
+    from . import (change_impact, demo_data, exec_report, incident_mgmt,
+                   kri_appetite, resilience)
     with risk.session(DEMO_DB_PATH) as conn:
         # demo_data.seed is idempotent via meta; force wipe is delete-file (reset).
         demo_data.seed(conn, index_conn)
@@ -126,6 +127,7 @@ def ensure_seeded(*, force: bool = False, index_conn=None) -> dict:
         incident_mgmt.seed(conn, index_conn, force=force)
         resilience.seed(conn, index_conn, force=force)
         exec_report.seed(conn, index_conn, force=force)
+        change_impact.seed(conn, index_conn, force=force)
         return {"path": DEMO_DB_PATH, "synthetic": risk.is_synthetic(conn)}
 
 
