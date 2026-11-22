@@ -28,10 +28,13 @@ def test_overview_snapshot_from_seeded_records():
         incident_mgmt.seed(conn, None, force=True)
         snap = overview.snapshot(conn)
         assert snap["metrics"]["open_risks"] >= 1
-        assert "material_risks" in snap["metrics"]
-        assert "appetite_exceptions" in snap["metrics"]
+        assert snap["metrics"]["material_residual_risks"] >= 0
+        assert "kri_threshold_breaches" in snap["metrics"]
+        assert "critical_control_gaps" in snap["metrics"]
+        assert "overdue_risk_actions" in snap["metrics"]
         assert snap["register"] is not None
-        assert not snap["heat"].empty or snap["metrics"]["open_risks"] == 0
+        assert not snap["exposure"].empty
+        assert "issue" in snap["attention"].columns or snap["attention"].empty
         assert "is a live revolut feed" in snap["notice"].lower()  # negation phrase
 
 

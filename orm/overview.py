@@ -1,4 +1,8 @@
-"""Overview dashboard metrics — only values derived from application records."""
+"""Overview dashboard metrics — only values derived from application records.
+
+Powers the Risk Overview page. No fabricated trends: time series appear only
+when observation history exists. Attention items are deduplicated by source.
+"""
 from __future__ import annotations
 
 import datetime as dt
@@ -19,17 +23,41 @@ try:
     from . import queries
 except Exception:  # pragma: no cover
     queries = None
+try:
+    from . import regulatory_intel as ri
+except Exception:  # pragma: no cover
+    ri = None
 
 NOTICE = (
     "Overview metrics are calculated from the current risk store and regulation "
     "index. Synthetic demo rows are labelled. Nothing here is a live Revolut feed."
 )
 
+BAND_ORDER = ("Critical", "High", "Moderate", "Medium", "Low")
 
-def snapshot(conn, index_conn=None, *, today: dt.date | None = None) -> dict:
+
+def _band_counts(series: pd.Series) -> dict[str, int]:
+    counts = {b: 0 for b in ("Critical", "High", "Moderate", "Low")}
+    if series is None or series.empty:
+        return counts
+    for v in series.dropna():
+        label = str(v)
+        if label == "Medium":
+            label = "Moderate"
+        if label in counts:
+            counts[label] += 1
+    return counts
+
+
+def snapshot(conn, index_conn=None, *, today: dt.date | None = None,
+             period: str = "monthly",
+             legal_entity: str | None = None) -> dict:
     today = today or dt.date.today()
     iso = today.isoformat()
     reg = risk.register(conn, iso)
+    if legal_entity and not reg.empty and "legal_entity" in reg.columns:
+        reg = reg[reg["legal_entity"].fillna("") == legal_entity]
+
     ctl = risk.control_status(conn)
     acts = risk.actions(conn, iso)
     incidents = risk.incidents(conn)
@@ -48,37 +76,56 @@ def snapshot(conn, index_conn=None, *, today: dt.date | None = None) -> dict:
 
     kri_breaches = pd.DataFrame()
     kri_trends = pd.DataFrame()
+    kri_trend_label = ""
     if ka is not None:
         try:
             lib = ka.library(conn)
             kri_breaches = lib[lib["rag"].isin(["Red", "Amber"])] if not lib.empty else lib
-            # Prefer payment-failure series for the demo story
             kid = "KRI-PAY-FAIL"
             if not lib.empty and kid in set(lib["id"]):
                 kri_trends = ka.observations(conn, kid)
+                kri_trend_label = kid
             elif not lib.empty:
-                kri_trends = ka.observations(conn, lib.iloc[0]["id"])
+                kri_trend_label = lib.iloc[0]["id"]
+                kri_trends = ka.observations(conn, kri_trend_label)
         except Exception:
             pass
     if kri_breaches.empty:
         kris = risk.kri_status(conn)
         kri_breaches = kris[kris["rag"].isin(["Red", "Amber"])] if not kris.empty else kris
         if kri_trends.empty and not kris.empty:
-            kid = kris.iloc[0]["id"]
-            kri_trends = risk.kri_readings(conn, kid)
+            kri_trend_label = kris.iloc[0]["id"]
+            kri_trends = risk.kri_readings(conn, kri_trend_label)
 
     high_inc = pd.DataFrame()
     if not incidents.empty and "severity" in incidents.columns:
         high_inc = incidents[incidents["severity"].isin(["P1", "P2"])]
     overdue = acts[acts["overdue"]] if not acts.empty else acts
 
-    # Heat map counts
+    residual_dist = _band_counts(reg["residual_band"] if not reg.empty else pd.Series(dtype=object))
+    inherent_dist = _band_counts(reg["inherent_band"] if not reg.empty else pd.Series(dtype=object))
+
+    # Exposure chart frame: inherent vs residual counts by band (current only —
+    # no fabricated period history).
+    exposure_rows = []
+    for band in ("Low", "Moderate", "High", "Critical"):
+        exposure_rows.append({
+            "band": band,
+            "Inherent": inherent_dist.get(band, 0),
+            "Residual": residual_dist.get(band, 0),
+        })
+    exposure = pd.DataFrame(exposure_rows)
+
+    # Genuine KRI history only when ≥2 observations exist
+    has_kri_history = (
+        kri_trends is not None and not kri_trends.empty
+        and "value" in kri_trends.columns and len(kri_trends) >= 2)
+
     heat = pd.DataFrame(0, index=range(5, 0, -1), columns=range(1, 6))
     if not reg.empty:
         for _, r in reg.iterrows():
             heat.loc[int(r["residual_impact"]), int(r["residual_likelihood"])] += 1
 
-    # Regulatory changes requiring review (from index when available)
     changes = pd.DataFrame()
     if index_conn is not None and queries is not None:
         try:
@@ -89,37 +136,52 @@ def snapshot(conn, index_conn=None, *, today: dt.date | None = None) -> dict:
         except Exception:
             changes = pd.DataFrame()
 
-    # Recent risk events = material incidents + recent audit creates
-    recent_events = []
-    if not high_inc.empty:
-        for _, i in high_inc.head(5).iterrows():
-            recent_events.append({
-                "kind": "incident",
-                "id": i["id"],
-                "title": i.get("title") or i["id"],
-                "when": i.get("occurred_at") or "",
-                "detail": f"Severity {i.get('severity')}",
-            })
-    for h in risk.history(conn, table="risk", limit=20):
-        if h.get("action") != "create":
-            continue
-        recent_events.append({
-            "kind": "risk",
-            "id": h.get("object_id"),
-            "title": f"Risk recorded {h.get('object_id')}",
-            "when": h.get("ts") or "",
-            "detail": f"Actor {h.get('actor') or '—'}",
-        })
-        if len(recent_events) >= 8:
-            break
+    applicability_pending = pd.DataFrame()
+    if ri is not None:
+        try:
+            apps = ri.list_applicability(conn)
+            if not apps.empty:
+                applicability_pending = apps[apps["status"].isin(
+                    ["not_yet_assessed", "requires_interpretation",
+                     "potentially_applicable"])]
+        except Exception:
+            applicability_pending = pd.DataFrame()
 
-    priority_actions = overdue.head(8) if not overdue.empty else overdue
+    # Open change-impact review actions (table may be absent on older DBs)
+    change_actions = pd.DataFrame()
+    try:
+        change_actions = risk._df(conn, """
+            SELECT * FROM change_impact_action
+            WHERE status IN ('open', 'suggested')
+            ORDER BY due_at, id LIMIT 8""")
+    except Exception:
+        change_actions = pd.DataFrame()
+
+    attention = _attention_queue(
+        outside=outside, kri_breaches=kri_breaches, weak=weak,
+        overdue=overdue, high_inc=high_inc)
+
+    recent_activity = _recent_activity(conn, high_inc, ctl, acts)
+
+    entities = []
+    if not reg.empty and "legal_entity" in reg.columns:
+        entities = sorted({e for e in reg["legal_entity"].fillna("").tolist() if e})
 
     return {
         "notice": NOTICE,
         "synthetic": risk.is_synthetic(conn),
         "bank": risk.get_meta(conn, "bank") or "",
+        "as_of": iso,
+        "period": period,
+        "legal_entity": legal_entity or "",
+        "legal_entities": entities,
+        "updated_at": risk.now(),
         "metrics": {
+            "material_residual_risks": 0 if material.empty else len(material),
+            "kri_threshold_breaches": 0 if kri_breaches.empty else len(kri_breaches),
+            "critical_control_gaps": 0 if weak.empty else len(weak),
+            "overdue_risk_actions": 0 if overdue.empty else len(overdue),
+            # retained for tests / secondary use
             "material_risks": 0 if material.empty else len(material),
             "appetite_exceptions": 0 if outside.empty else len(outside),
             "control_weaknesses": 0 if weak.empty else len(weak),
@@ -128,16 +190,150 @@ def snapshot(conn, index_conn=None, *, today: dt.date | None = None) -> dict:
             "overdue_actions": 0 if overdue.empty else len(overdue),
             "open_risks": 0 if reg.empty else len(reg),
         },
+        "kpi_links": {
+            "material_residual_risks": "risks",
+            "kri_threshold_breaches": "kri",
+            "critical_control_gaps": "controls",
+            "overdue_risk_actions": "incidents",
+        },
         "register": reg,
         "material": material,
         "outside": outside,
         "weak_controls": weak,
         "kri_breaches": kri_breaches,
         "kri_trends": kri_trends,
+        "kri_trend_label": kri_trend_label,
+        "has_kri_history": has_kri_history,
         "high_incidents": high_inc,
-        "priority_actions": priority_actions,
+        "priority_actions": overdue.head(8) if not overdue.empty else overdue,
         "heat": heat,
+        "exposure": exposure,
+        "residual_distribution": residual_dist,
+        "inherent_distribution": inherent_dist,
+        "attention": attention,
         "changes": changes if isinstance(changes, pd.DataFrame) else pd.DataFrame(),
-        "recent_events": recent_events,
+        "applicability_pending": applicability_pending,
+        "change_actions": change_actions,
+        "recent_activity": recent_activity,
         "empty": reg.empty and (incidents.empty if incidents is not None else True),
     }
+
+
+def _attention_queue(*, outside, kri_breaches, weak, overdue, high_inc) -> pd.DataFrame:
+    """Unified, deduplicated management-attention rows. Transparent priority."""
+    rows = []
+    seen = set()
+
+    def add(key, issue, category, severity, owner, when, status, page, record_id):
+        if key in seen:
+            return
+        seen.add(key)
+        sev_rank = {"Critical": 0, "High": 1, "P1": 0, "P2": 1, "Red": 0,
+                    "Amber": 2, "Moderate": 3, "Medium": 3}.get(severity, 4)
+        rows.append({
+            "key": key,
+            "issue": issue,
+            "category": category,
+            "severity": severity,
+            "owner": owner or "—",
+            "when": when or "—",
+            "status": status or "open",
+            "page": page,
+            "record_id": record_id,
+            "_rank": sev_rank,
+        })
+
+    if outside is not None and not outside.empty:
+        for _, r in outside.iterrows():
+            add(f"risk:{r['id']}", f"{r['id']} — {r['title']}",
+                "Risk above appetite", r.get("residual_band") or "High",
+                r.get("owner"), r.get("next_review_at") or r.get("assessed_at"),
+                r.get("residual_status") or "open", "risks", r["id"])
+
+    if kri_breaches is not None and not kri_breaches.empty:
+        for _, k in kri_breaches.iterrows():
+            kid = k.get("id") or k.get("kri_id")
+            add(f"kri:{kid}", f"{kid} — {k.get('name') or 'KRI'}",
+                "KRI breach", k.get("rag") or "Red",
+                k.get("metric_owner") or k.get("owner"),
+                k.get("period") or k.get("observed_at"),
+                k.get("rag") or "breach", "kri", kid)
+
+    if weak is not None and not weak.empty:
+        for _, c in weak.iterrows():
+            add(f"ctl:{c['id']}", f"{c['id']} — {c.get('name') or 'Control'}",
+                "Failed / ineffective control",
+                "High" if c.get("rating") == "ineffective" else "Moderate",
+                c.get("owner"), c.get("tested_at") or "never",
+                c.get("rating") or "not effective", "controls", c["id"])
+
+    if overdue is not None and not overdue.empty:
+        for _, a in overdue.iterrows():
+            add(f"act:{a['id']}", a.get("title") or a["id"],
+                "Overdue remediation", "High",
+                a.get("owner"), a.get("due_at"),
+                a.get("status") or "open",
+                "incidents" if a.get("source_kind") == "incident" else "risks",
+                a.get("source_id") or a["id"])
+
+    if high_inc is not None and not high_inc.empty:
+        for _, i in high_inc.iterrows():
+            add(f"inc:{i['id']}", f"{i['id']} — {i.get('title') or 'Incident'}",
+                "High-severity incident", i.get("severity") or "P1",
+                i.get("owner"), i.get("occurred_at") or i.get("detected_at"),
+                i.get("workflow_status") or i.get("status") or "open",
+                "incidents", i["id"])
+
+    if not rows:
+        return pd.DataFrame(columns=[
+            "issue", "category", "severity", "owner", "when", "status",
+            "page", "record_id"])
+    df = pd.DataFrame(rows).sort_values(["_rank", "when"]).drop(columns=["_rank", "key"])
+    return df.reset_index(drop=True)
+
+
+def _recent_activity(conn, high_inc, ctl, acts) -> list[dict]:
+    """Reliable activity only — audit log + recent incidents / tests."""
+    items = []
+    if high_inc is not None and not high_inc.empty:
+        for _, i in high_inc.head(4).iterrows():
+            items.append({
+                "kind": "incident",
+                "id": i["id"],
+                "title": i.get("title") or i["id"],
+                "when": i.get("occurred_at") or "",
+                "detail": f"Severity {i.get('severity')}",
+                "page": "incidents",
+            })
+    if ctl is not None and not ctl.empty and "tested_at" in ctl.columns:
+        tested = ctl[ctl["tested_at"].notna() & (ctl["tested_at"] != "")].copy()
+        if not tested.empty:
+            tested = tested.sort_values("tested_at", ascending=False).head(3)
+            for _, c in tested.iterrows():
+                items.append({
+                    "kind": "control_test",
+                    "id": c["id"],
+                    "title": c.get("name") or c["id"],
+                    "when": c.get("tested_at") or "",
+                    "detail": f"Rating {c.get('rating') or '—'}",
+                    "page": "controls",
+                })
+    for h in risk.history(conn, limit=30):
+        if h.get("table_name") not in ("risk", "action", "control_test", "incident"):
+            continue
+        if h.get("action") not in ("create", "update"):
+            continue
+        items.append({
+            "kind": h.get("table_name"),
+            "id": h.get("object_id"),
+            "title": f"{h.get('table_name')} {h.get('action')}",
+            "when": h.get("ts") or "",
+            "detail": f"Actor {h.get('actor') or '—'}",
+            "page": {"risk": "risks", "action": "risks", "incident": "incidents",
+                     "control_test": "controls"}.get(h.get("table_name"), "risks"),
+        })
+        if len(items) >= 10:
+            break
+    # Prefer most recent timestamps first when present
+    items.sort(key=lambda x: x.get("when") or "", reverse=True)
+    return items[:8]

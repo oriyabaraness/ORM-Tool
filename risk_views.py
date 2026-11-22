@@ -161,6 +161,14 @@ def page_risks() -> None:
         if reg.empty:
             st.markdown(notice("No risks recorded yet."), unsafe_allow_html=True)
             return
+        # Optional filter from Overview residual-band click
+        band = st.session_state.pop("ov_filter_band", None)
+        if band:
+            mapped = "Medium" if band == "Moderate" else band
+            filtered = reg[reg["residual_band"].isin([band, mapped])]
+            if not filtered.empty:
+                reg = filtered
+                st.caption(f"Filtered from Overview · residual band: {band}")
         st.markdown(_status_line([
             ("open risks", str(len(reg))),
             ("outside appetite", str(int((reg["appetite"] == "Outside appetite").sum()))),
