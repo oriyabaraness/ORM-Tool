@@ -273,9 +273,9 @@ from the real index:
 Demo walkthrough (5 minutes): Compare (BOI 366 vs Jordan) → Obligation →
 Risk register (`RSK-001` chain) → Management report → audit history.
 
-Still missing for a polished interview demo: "Linked risks" back-links from
-Obligations/Compare (step 8), applicability decisions (step 9), and DESIGN/README
-updates (step 11).
+Still optional for a polished interview demo: "Linked risks" back-links from
+Obligations/Compare (step 8), and a fuller README refresh (step 11).
+Applicability and the Regulatory Intelligence workspace are in place.
 
 ---
 
