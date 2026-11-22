@@ -1,7 +1,15 @@
 # ClauseWiz → Operational Risk Workflow: Audit and Build Plan
 
-Status: plan only. No application code has been changed for this plan.
-Prepared: 22 Nov 2026, from a read of the repository at commit `f1f5b62`.
+**Status (22 Nov 2026):**
+- **Audit:** complete (this document).
+- **Production (clausewiz.ai / `main` at plan commit):** regulatory comparison +
+  obligations/controls/audit readiness. Plan file is on `main`; the risk
+  vertical slice is **not** deployed yet.
+- **Local working tree (uncommitted):** interview-ready vertical slice coded
+  (`orm/risk.py`, `orm/demo_data.py`, `orm/risk_report.py`, `risk_views.py`,
+  `tests/test_risk.py`, `app.py` Risk nav, `.gitignore`). **62 tests pass**
+  (`51` existing + `11` risk). Not committed or pushed — waiting for explicit
+  go before shipping.
 
 Purpose: show, in an interview for an Operational Risk Manager role, that
 ClauseWiz can grow from regulatory comparison into a traceable operational
@@ -21,18 +29,18 @@ uses no Revolut internal information and makes no claim to.
 
 | Area | What is actually there |
 |---|---|
-| Language | Python 3.12 (Render pins 3.12.8). About 16k lines. |
+| Language | Python 3.12 (Render pins 3.12.8). ~18k lines including the local risk slice. |
 | UI framework | **Streamlit 1.58** multipage app (`st.navigation`). No React, Next.js or FastAPI. `starlette`/`uvicorn` in `requirements.txt` are Streamlit's own dependencies. |
-| Entry point | `app.py` wires pages only. It re-imports `orm`, `orm_compare`, `ui_theme`, `controls_views` on every run so a running server never serves stale code. |
-| Routing | `st.Page(..., url_path=...)`: `/` (Home), `/compare`, `/coverage`, `/gaps`, `/deadlines`, `/changes`, `/obligations`, `/controls`, `/audit`, `/sources`. Scope (country, category, directive) is kept in `st.session_state` and query params. |
-| Screens | `orm_compare.py` (Home, Compare, Coverage, Gaps, Deadlines, Changes), `controls_views.py` (Obligations, Controls, Audit readiness), `reference_views.py` (Sources reader; Market context switched off). Styling in `ui_theme.py` plus `.streamlit/config.toml`. |
+| Entry point | `app.py` wires pages only. It re-imports `orm`, `orm_compare`, `ui_theme`, `controls_views`, `risk_views` on every run so a running server never serves stale code. |
+| Routing | `st.Page(..., url_path=...)`: `/` (Home), `/compare`, `/coverage`, `/gaps`, `/deadlines`, `/changes`, `/obligations`, `/controls`, `/audit`, and locally `/risks`, `/risk-report`, `/sources`. Scope (country, category, directive) is kept in `st.session_state` and query params. |
+| Screens | `orm_compare.py` (Home, Compare, Coverage, Gaps, Deadlines, Changes), `controls_views.py` (Obligations, Controls, Audit readiness), `risk_views.py` (Risk register, Risk report — local only), `reference_views.py` (Sources; Market context switched off). Styling in `ui_theme.py` plus `.streamlit/config.toml`. |
 | Backend / API | **No HTTP API.** The Streamlit server calls the `orm/` package directly. Logic lives in `orm/`; screens only render. |
-| Persistence | Two SQLite files. **`orm.db`**: the regulation index, rebuilt from regulator sources on every deploy (`ORM_DB`). **`orm_state.db`**: human work (reviews, match decisions, uploaded bank controls, append-only audit log), never rebuilt (`ORM_STATE_DB`). |
+| Persistence | Two SQLite files in production; three locally once risk is enabled. **`orm.db`**: regulation index, rebuilt on every deploy (`ORM_DB`). **`orm_state.db`**: human work — reviews, match decisions, uploaded bank controls, append-only audit log — never rebuilt (`ORM_STATE_DB`). **`orm_risk.db`** (local / planned): synthetic ORM workflow data (`ORM_RISK_DB`). |
 | Batch pipeline | `orm_pipeline.py` CLI → `orm/pipeline.py`: ingest metadata from CSVs (`orm/sources.py`) → download PDFs and extract text (`orm/extract.py`, PyMuPDF) → split into numbered clauses → tag with risk taxonomy → match clauses across countries → extract obligations → suggest controls. `orm/update.py` re-crawls regulators with backup/rollback. |
 | Crawlers | Root scripts (`boi_*.py`, `jordan_cbj_*.py`, `turkey_cbrt_index.py`); two use Playwright. Run by hand or by `orm_pipeline.py update`, not at deploy. |
 | AI | Optional Anthropic Claude via plain `requests` (`orm/llm.py`, `orm/llm_review.py`). Offline batch only, results cached as JSON in the repo; the app never calls an API at runtime. **No caches exist today** (`orm_texts/llm/` and `orm_texts/llm_reviews/` are absent), so production is 100% rule-based. |
 | Deployment | Railway (`railway.json`): build runs `orm_pipeline.py build --fetch` then `status`; start runs Streamlit on `$PORT`. Auto-deploys from `main`. `render.yaml` kept as an alternative. Domain: clausewiz.ai. |
-| Tests | `tests/test_orm.py`: 51 tests, pass in ~2 s. Uses a small built index fixture and a fake `streamlit` module to render screens. |
+| Tests | `tests/test_orm.py` (51) + local `tests/test_risk.py` (11) = **62 passing**. Uses a small built-index fixture and a fake `streamlit` module to render screens. |
 
 ### Index contents today (local `orm.db`)
 
@@ -45,7 +53,7 @@ uses no Revolut internal information and makes no claim to.
 | Baseline-expectation hits | 1,811 |
 | Obligations (all rule-based) | 6,076 |
 | Suggested obligation → control links | 2,892 |
-| Human reviews / match decisions / bank controls / log entries (local state) | 0 / 0 / 0 / 0 |
+| Human reviews / match decisions / bank controls / log entries (local state) | typically empty unless used |
 
 Bank of Israel directives already indexed that matter for this interview (titles as stored in the index):
 310 Risk Management · 350 Operational Risk Management · 355 Business continuity management ·
@@ -63,44 +71,47 @@ indexed text.
 ## 2. Audit by area (the 15 points)
 
 1. **Languages and frameworks.** Python, Streamlit, pandas, SQLite (with FTS5), PyMuPDF, openpyxl, requests, BeautifulSoup, Playwright (crawlers only). There's no JavaScript build: custom HTML/CSS goes through `st.markdown(unsafe_allow_html=True)`, and `boi_pdf_viewer.py` uses an inline HTML component.
-2. **Frontend and routing.** Streamlit pages grouped in the sidebar as *Compare* / *Controls* / *Reference*. A shared scope bar (`orm_compare.scope_bar`) is remembered across screens. The design system is in `DESIGN.md` with tokens in `ui_theme.py`. It's mobile-tested at 390/768/1280/1500 px.
-3. **Backend and endpoints.** No REST endpoints. "Backend" = `orm/` modules called in-process: `queries.py` (read models), `audit.py` (obligation table, coverage, audit pack), `state.py` (writes plus audit log), `obligations.py`, `match.py`, `review.py`.
-4. **Database.** `orm.db` tables: `jurisdiction`, `document`, `risk_category`, `document_category`, `provision` (+ `provision_fts`), `provision_category`, `obligation_attr`, `expectation_hit`, `provision_match`, `obligation`, `obligation_control`, `meta`. `orm_state.db` tables: `obligation_review`, `match_review`, `bank_control`, `audit_log`. Cross-file links use **stable content keys** (`okey` = hash of document + sentence; `mkey` = hashes of both clause texts), so human decisions survive rebuilds and are invalidated automatically when the source text changes.
+2. **Frontend and routing.** Streamlit pages grouped in the sidebar as *Compare* / *Controls* / *Risk* (local) / *Reference*. A shared scope bar (`orm_compare.scope_bar`) is remembered across screens. The design system is in `DESIGN.md` with tokens in `ui_theme.py`. Mobile-tested at 390/768/1280/1500 px for the comparison workspace.
+3. **Backend and endpoints.** No REST endpoints. "Backend" = `orm/` modules called in-process: `queries.py` (read models), `audit.py` (obligation table, coverage, audit pack), `state.py` (writes plus audit log), `obligations.py`, `match.py`, `review.py`, and locally `risk.py` / `risk_report.py` / `demo_data.py`.
+4. **Database.** `orm.db` tables: `jurisdiction`, `document`, `risk_category`, `document_category`, `provision` (+ `provision_fts`), `provision_category`, `obligation_attr`, `expectation_hit`, `provision_match`, `obligation`, `obligation_control`, `meta`. `orm_state.db` tables: `obligation_review`, `match_review`, `bank_control`, `audit_log`. Cross-file links use **stable content keys** (`okey` = hash of document + sentence; `mkey` = hashes of both clause texts), so human decisions survive rebuilds and are invalidated automatically when the source text changes. Local `orm_risk.db`: see §5.
 5. **AI providers.** Anthropic Messages API only, model from `ORM_LLM_MODEL` (default `claude-sonnet-5-5`), key from `ANTHROPIC_API_KEY`. Two prompts: obligation extraction (`orm/llm.py`) and clause-pair review (`orm/llm_review.py`).
 6. **PDF / document handling.** PDFs are downloaded at build time, text extracted with PyMuPDF, stored as `orm_texts/<slug>.txt.gz`; the PDF is discarded. Manual PDFs can be dropped into `orm_texts/manual/<id>.pdf`. **No user PDF upload.** The only user upload is the bank control list (CSV/Excel) on Audit readiness. The Sources reader re-fetches a PDF and renders page images.
 7. **Regulatory comparison.** Country → risk category → directive → clause → equivalents in other countries. Matching is TF-IDF cosine × 0.7 + shared-expectation Jaccard × 0.3, within the same category, top 5 per clause; Strong ≥ 0.35, Partial ≥ 0.18. Cover/contents/definition clauses are excluded. Suggested matches can be confirmed/rejected and are logged. Coverage matrix, baseline-expectation gaps (found / not found / not assessed), deadlines, and changes are all present.
 8. **Prompts and extraction logic.** Rule-based: modal-verb sentence extraction (`shall/must/required` = mandatory, `should/expected` = expected), actor detection, deadline/frequency normalisation, evidence hint by verb. LLM prompts are short, JSON-only, and guarded: **every LLM item must quote a sentence that exists verbatim in the cited clause or it is dropped**; penalties/costs/severity not in the source are stripped (`llm_review._clean`).
-9. **Citations.** Every clause carries regulator · document ref · clause ref plus a link to the official PDF/page (`audit.citation`, `orm_compare._cite`). Obligations store the exact source sentence. The audit pack carries citations and a disclaimer. No page numbers (text is stored without page positions).
+9. **Citations.** Every clause carries regulator · document ref · clause ref plus a link to the official PDF/page (`audit.citation`, `orm_compare._cite`). Obligations store the exact source sentence. The audit pack and (locally) the risk report carry citations and a disclaimer. No page numbers (text is stored without page positions).
 10. **Authentication / authorisation.** **None.** The site is public; the "reviewer" is a free-text name typed on screen. Anyone with the URL can write reviews and upload controls.
 11. **Deployment.** Railway build-then-start. The index is rebuilt on every deploy (network fetch with a 20 s timeout and per-host failure cut-off). `orm_state.db` persists only if `ORM_STATE_DB` points to a mounted Railway volume. The UI itself warns that a redeploy may reset it.
-12. **Environment variables.** `ORM_DB`, `ORM_STATE_DB`, `ORM_FETCH_TIMEOUT`, `ORM_LLM_MODEL`, `ANTHROPIC_API_KEY`, `BOI_PDF_TEXT_MANIFEST`, `PORT`. No secrets are committed (checked: keys are only read from the environment).
+12. **Environment variables.** `ORM_DB`, `ORM_STATE_DB`, `ORM_RISK_DB` (local/planned), `ORM_FETCH_TIMEOUT`, `ORM_LLM_MODEL`, `ANTHROPIC_API_KEY`, `BOI_PDF_TEXT_MANIFEST`, `PORT`. No secrets are committed (keys are only read from the environment).
 13. **Error handling and monitoring.** Pipeline records per-document errors in `document.error` and skips failing hosts. `update.py` rolls back bad crawls. UI catches bad uploads and reader fetch failures. **No logging framework, no error tracking, no health checks or alerting** beyond Railway's logs and restart-on-failure.
-14. **Dependencies and tests.** Pinned `requirements.txt`, no paid services. 51 tests cover splitting, tagging, connectors, matching, the honest states, reviews surviving rebuilds, audit replay "as of" a date, control upload, coverage and audit pack, the LLM quote guardrails, and screen rendering.
+14. **Dependencies and tests.** Pinned `requirements.txt`, no paid services. Existing tests cover splitting, tagging, connectors, matching, honest states, reviews surviving rebuilds, audit replay "as of" a date, control upload, coverage and audit pack, LLM quote guardrails, and screen rendering. Local risk tests cover scoring, RAG, audit log, soft delete, seed integrity, report labelling, formula-safe Excel, and HTML escaping.
 15. **What already supports risk management.**
-    - 12-category risk taxonomy with ORM-core flag (governance, op resilience, third party, ICT/cyber, incident reporting, AML, conduct …).
+    - 13-category risk taxonomy with ORM-core flag (governance, op resilience, third party, ICT/cyber, incident reporting, AML, conduct …).
     - Baseline expectations per category (e.g. BCP, RTO/RPO, testing, scenarios, loss data).
     - Obligation extraction with owner (actor), deadline, frequency and evidence.
-    - **42-control starter library** (`orm/controls.py`), including RCSA, loss data, crisis management, incident notification, RCA, change management and exit plans.
+    - **45-control starter library** (`orm/controls.py` `LIBRARY`), including RCSA, loss data, crisis management, incident notification, RCA, change management and exit plans.
     - Control suggestions, bank control upload and coverage scoring.
     - Append-only audit log with point-in-time replay, plus Excel/PDF audit pack generation (`orm/simple_pdf.py`, openpyxl).
     - `review.py` already classifies text by Basel-style cause themes (People, Processes, Systems, External events, Third parties).
+    - **Local (uncommitted):** full synthetic chain Risk → Control → KRI → Incident → Action → Report, with BOI citations resolved from the live index.
 
 ---
 
 ## 3. Functional gap analysis
 
+Status reflects **production today**, with a note where local uncommitted code already closes the gap.
+
 | # | Capability | Status | Evidence | Smallest change to close |
 |---|---|---|---|---|
-| A | Regulatory obligation extraction | **Implemented but unreliable** | 6,076 rule-based obligations, 0 human-reviewed, 0 LLM-verified. Actor and scope detection are heuristic. Only 11 IL obligations tagged *incident reporting* even though Directive 366 is indexed, so tagging needs review. | For the demo, review and approve the obligations from directives 350, 355, 357/364, 362, 366 that the risk register links to. Optionally run the existing `--llm` extraction on those five directives (needs the owner's key) and commit the verified cache. |
+| A | Regulatory obligation extraction | **Implemented but unreliable** | 6,076 rule-based obligations, 0 human-reviewed, 0 LLM-verified. Actor and scope detection are heuristic. | For the demo, validate linked obligations from BOI 350/355/362/364/366. Optionally run `--llm` on those directives (needs the owner's key) and commit the verified cache. |
 | B | Directive comparison across jurisdictions | **Implemented** | Compare screen, matches, confirm/reject, gaps. Limits: Turkey has no text; Jordan 83/91. | None for the slice. |
-| C | Regulatory applicability assessment | **Missing** (only entity hints in `review._entities`) | No record of "does this directive apply to us, and why". | One `applicability` record per directive (applies / partly / does not apply, entity type, rationale, reviewer), stored with the risk data and logged. A selector on the Risk register's linked-obligation view. |
-| D | Operational risk identification | **Missing** (groundwork only) | Taxonomy categories are regulatory topics, not a risk register. | `risk` table plus a Risk register screen. Seeded synthetic risks each link to cited obligations. |
-| E | Inherent and residual risk scoring | **Missing** | No likelihood/impact anywhere. | 5×5 scoring functions in `orm/risk.py` (pure, unit-tested); residual derived from control effectiveness with a logged, reasoned override. |
-| F | Control mapping and effectiveness | **Partially implemented** | Library, suggestions, bank upload, text-similarity coverage. No design/operating effectiveness, no tests, no key-control flag. | `control`, `risk_control`, `control_test` tables. Controls reference existing library IDs (e.g. `RES-03`) so the current Controls screen keeps working. |
-| G | KRI monitoring and thresholds | **Missing** | — | `kri` and `kri_reading` tables; RAG computed from green/amber thresholds; breach → escalation flag. |
-| H | Incident tracking | **Missing** (only regulation *about* incident reporting) | — | `incident` and `incident_link` tables: timestamps (occurred / detected / resolved / notified), Basel event type, gross/recovered/net loss, failed controls, notification obligation link. |
-| I | Business impact and resilience | **Missing** (control texts and BOI 355 text only) | — | `business_service` table: criticality, impact tolerance, RTO/RPO, dependencies, last scenario test. Links to risks and incidents. |
-| J | Management risk reporting | **Partially implemented** | Audit pack (Excel/PDF) and coverage summary exist; no risk-profile report. | `orm/risk_report.py` builds one report frame (top residual risks vs appetite, KRI breaches, incidents and losses, overdue actions, failed control tests, unlinked obligations). Reuses `simple_pdf` and openpyxl. |
+| C | Regulatory applicability assessment | **Missing** | Only entity hints in `review._entities`. No "does this directive apply to us" record. Schema planned (`applicability`); **not coded yet**. | One `applicability` record per directive + selector on Risk register. |
+| D | Operational risk identification | **Missing in prod** · **Partially implemented locally** | Taxonomy ≠ risk register. Local: 4 seeded synthetic risks with owners, Basel event types, causes/effects. | Commit/push the local Risk register screen. |
+| E | Inherent and residual risk scoring | **Missing in prod** · **Implemented locally** | Local 5×5 scoring, weakest-key-control residual, override with mandatory rationale, unit-tested. | Ship `orm/risk.py` scoring + UI. |
+| F | Control mapping and effectiveness | **Partially implemented** (prod library/upload) · **local adds design/operating tests** | Prod: 45-control library, suggestions, bank upload, text-similarity coverage. Local: `control`, `risk_control`, `control_test` with ratings. | Ship local control-test layer; keep library IDs so Controls screen still works. |
+| G | KRI monitoring and thresholds | **Missing in prod** · **Implemented locally** | Local: 5 KRIs, 30 readings, green/amber/red by direction. | Ship KRI tabs + report breaches. |
+| H | Incident tracking | **Missing in prod** · **Implemented locally** | Local: 2 synthetic incidents with timestamps, loss, failed-control and notification-obligation links. | Ship Incidents tab. |
+| I | Business impact and resilience | **Missing in prod** · **Partially implemented locally** | Local: 2 business services with criticality, impact tolerance, RTO/RPO, last test; incidents show tolerance breach. No full dependency graph UI. | Ship service records; deepen later if needed. |
+| J | Management risk reporting | **Partially implemented** (prod audit pack) · **local risk report** | Prod: Excel/PDF audit pack. Local: heat map, outside appetite, KRI breaches, incidents/losses, overdue actions, weak controls, unvalidated links; Excel/PDF with synthetic watermark. | Ship Risk report page. |
 
 ---
 
@@ -112,12 +123,12 @@ indexed text.
 ```
             rebuilt every deploy                 human/demo work, never rebuilt
           ┌──────────────────────┐            ┌────────────────────────────────┐
-regulator │ orm.db               │  okey      │ orm_risk.db  (NEW, ORM_RISK_DB)│
+regulator │ orm.db               │  okey      │ orm_risk.db  (ORM_RISK_DB)     │
 PDFs ───► │ document → provision │◄────────── │ risk_obligation (citation snap)│
           │ → obligation (okey)  │            │ risk · control · control_test  │
           └──────────────────────┘            │ kri · kri_reading · incident   │
           ┌──────────────────────┐            │ business_service · action      │
-          │ orm_state.db (as is) │            │ appetite · applicability       │
+          │ orm_state.db (as is) │            │ appetite · applicability(*)    │
           │ reviews, audit_log   │            │ risk_audit_log · meta          │
           └──────────────────────┘            └────────────────────────────────┘
                      ▲                                       ▲
@@ -126,6 +137,8 @@ PDFs ───► │ document → provision │◄─────────�
                                          ▲
                                 risk_views.py (render only) ── app.py nav group "Risk"
 ```
+
+(\*) `applicability` is in the plan; not yet in the local schema.
 
 Why a **separate `orm_risk.db`** rather than new tables in `orm_state.db`:
 
@@ -136,7 +149,8 @@ Why a **separate `orm_risk.db`** rather than new tables in `orm_state.db`:
 Linking to regulation uses the existing stable `okey`. When a regulator
 changes a sentence, its `okey` disappears from `orm.db` on the next build. The
 risk link is then shown as **"Source text changed: re-validate"** instead of
-silently pointing at different text.
+silently pointing at different text. Local seeder verified: **10/10** obligation
+links resolve against the current index (`missing_links = []`).
 
 ---
 
@@ -219,6 +233,7 @@ action(id PK, source_kind,                        -- incident|control_test|risk|
 
 applicability(document_id PK, decision,           -- applies|partly|does_not_apply
               entity_type, rationale, reviewer, decided_at, ...conventions)
+              -- PLANNED; not yet in local schema
 
 risk_audit_log(id PK, ts, actor, action, table_name, object_id, before_json, after_json)
 meta(key PK, value)                               -- dataset=synthetic_demo, seed_version
@@ -244,20 +259,23 @@ from the real index:
 
 **Synthetic Bank "Demo Digital Bank Ltd" (fictional) — Card payments service.**
 
-| Step | Content |
-|---|---|
-| Service | `SVC-001` Card payments, critical, impact tolerance 4 h, RTO 2 h, RPO 15 min, dependencies: core processor, cloud provider (fictional), card scheme. |
-| Risks | `RSK-001` Payment outage from a failed production change. `RSK-002` Critical cloud provider outage. `RSK-003` Late regulatory notification of a technology incident. `RSK-004` Unrecoverable data after a cyber attack. |
-| Obligations | Linked by `okey` to real obligations found in the index from BOI 355, 357/364, 362, 366 (and 350 for the framework). The seeder **searches** the index for each link. If a sentence isn't found, the link is omitted and reported, never typed in. |
-| Controls | Built on library IDs: `ICT-06` change management, `RES-03` BCP/DR testing, `TPR-05` exit plan, `INC-02` regulatory notification, `ICT-05` backup and restore. Each has a synthetic test result. One is "partially effective" so residual risk visibly stays high. |
-| KRIs | Failed change rate (%), payment authorisation success rate (%), P1 incidents per month, critical vendor SLA breaches, minutes from detection to regulatory notification. Six months of synthetic readings with one amber and one red. |
-| Incident | `INC-001` card authorisation outage after a change: detected, escalated, resolved times, customers affected, synthetic gross/net loss. Linked to `RSK-001`, failed control `ICT-06`, and the BOI 366 notification obligation (cited). Shows "impact tolerance breached: yes/no" from the service record. |
-| Actions | RCA follow-ups with owners and due dates; one overdue. |
-| Report | One-page management report: risk heat map, risks outside appetite, KRI breaches, incidents and net loss, overdue actions, failed control tests, obligations with no linked control. Export to Excel and PDF with citations and a synthetic watermark. |
+| Step | Content | Local status |
+|---|---|---|
+| Service | `SVC-001` Card payments (+ `SVC-002` onboarding). Critical, impact tolerance / RTO / RPO set. | Seeded |
+| Risks | `RSK-001`…`RSK-004` (change outage, cloud outage, late notification, unrecoverable data). | Seeded |
+| Obligations | Linked by `okey` from BOI 350/355/362/364/366 via phrase search. | **10 links, 0 missing** on current index |
+| Controls | Library-backed controls with one partially effective test so residual stays high. | Seeded (7 controls, 7 tests) |
+| KRIs | Five KRIs, six months of readings, amber and red present. | Seeded (5 KRIs, 30 readings) |
+| Incident | Card authorisation outage + second incident; loss, timestamps, failed control, BOI 366 notification link. | Seeded (2) |
+| Actions | RCA follow-ups; overdue derived from dates. | Seeded (5) |
+| Report | Heat map, outside appetite, KRI breaches, incidents, overdue actions, weak controls; Excel/PDF. | Implemented locally |
 
 Demo walkthrough (5 minutes): Compare (BOI 366 vs Jordan) → Obligation →
-"Linked risks" → Risk `RSK-001` chain (obligations → controls and tests → KRIs
-→ incident → actions) → Management report → audit log showing who changed what.
+Risk register (`RSK-001` chain) → Management report → audit history.
+
+Still missing for a polished interview demo: "Linked risks" back-links from
+Obligations/Compare (step 8), applicability decisions (step 9), and DESIGN/README
+updates (step 11).
 
 ---
 
@@ -265,39 +283,44 @@ Demo walkthrough (5 minutes): Compare (BOI 366 vs Jordan) → Obligation →
 
 Each step is one small, reviewable commit. Tests pass before each push.
 
-| Step | Change | Files | Done when |
+| Step | Change | Files | Status |
 |---|---|---|---|
-| 0 | Safety baseline: confirm 51 tests pass; download a copy of production `orm_state.db` (audit pack plus file) if a volume exists; record the current commit for rollback. | none | Baseline recorded |
-| 1 | Risk data layer: schema, `session()`, create/update with audit log, soft delete, scoring and RAG functions. No UI. | `orm/risk.py`, `tests/test_risk.py` | Scoring, RAG, appetite, audit-log and soft-delete tests pass |
-| 2 | Synthetic seed: idempotent; resolves obligation links from `orm.db` by search; writes only to `orm_risk.db`. | `orm/demo_data.py`, `tests/test_risk.py`, `.gitignore` | Every seeded `okey` exists in `orm.db` and its sentence appears in the clause text; seeding twice changes nothing; `orm_state.db` untouched |
-| 3 | Risk register and chain screen (read plus edit of scores and owner), with synthetic banner. New sidebar group "Risk". | `risk_views.py`, `app.py`, `ui_theme.py` (small: heat-map cell and RAG pill styles) | Renders in fake-streamlit test; browser check at 390/768/1280 |
-| 4 | Controls and tests, KRIs with readings, appetite. | `orm/risk.py`, `risk_views.py`, tests | RAG and residual update on edit; log entries written |
-| 5 | Incidents and remediation actions. | same | Incident links resolve; overdue derived from dates |
-| 6 | Resilience: business services, impact tolerance check on incidents. | same | Tolerance breach computed and shown |
-| 7 | Management report plus Excel/PDF export. | `orm/risk_report.py`, `risk_views.py`, tests | Export contains citations, synthetic label, disclaimer; formula-injection safe |
-| 8 | Hooks from existing screens: "Linked risks" on an obligation row (Obligations) and on a clause (Compare). Read-only, one line each. | `controls_views.py`, `orm_compare.py` (minimal) | Existing tests unchanged and passing |
-| 9 | Applicability decision per directive. | `orm/risk.py`, `risk_views.py` | Logged decision shown with the directive |
-| 10 (optional) | AI suggestion "risks this obligation may create", offline batch, quote-verified like `llm.py`, stored as `provenance=ai_suggestion, validation_status=suggested`. Needs the owner's API key; off by default. | `orm/llm_risk.py` | Suggestions never shown as validated |
-| 11 | Docs: DESIGN.md information architecture, README, AGENTS.md. | docs | Updated |
+| 0 | Safety baseline: confirm existing tests pass; do not touch `orm_state.db`. | none | Done (62 green locally) |
+| 1 | Risk data layer: schema, writes with audit log, soft delete, scoring and RAG. | `orm/risk.py`, `tests/test_risk.py` | **Coded locally, uncommitted** |
+| 2 | Synthetic seed: idempotent; resolves obligation links from `orm.db`; writes only to `orm_risk.db`. | `orm/demo_data.py`, tests, `.gitignore` | **Coded locally, uncommitted** |
+| 3 | Risk register and chain screen + "Risk" nav + synthetic banner. | `risk_views.py`, `app.py` | **Coded locally, uncommitted** |
+| 4 | Controls and tests, KRIs with readings, appetite. | same | **Coded locally, uncommitted** |
+| 5 | Incidents and remediation actions. | same | **Coded locally, uncommitted** |
+| 6 | Resilience: business services, impact tolerance on incidents. | same | **Coded locally, uncommitted** |
+| 7 | Management report plus Excel/PDF export. | `orm/risk_report.py`, `risk_views.py`, tests | **Coded locally, uncommitted** |
+| 8 | Hooks: "Linked risks" on Obligations and Compare (read-only). | `controls_views.py`, `orm_compare.py` | **Not started** |
+| 9 | Applicability decision per directive. | `orm/risk.py`, `risk_views.py` | **Not started** |
+| 10 (optional) | AI suggestion "risks this obligation may create", offline, quote-verified. | `orm/llm_risk.py` | **Not started** |
+| 11 | Docs: DESIGN.md IA, README, AGENTS.md. | docs | **Not started** (this plan file exists) |
 
-Steps 1–3 and 7 alone make a credible interview demo. Steps 4–6 deepen it.
+**Recommended next action:** after user "go", commit the local slice (steps 1–7)
+as one reviewable commit (or split data layer / UI / report if preferred), run
+tests, push to `main`, verify clausewiz.ai. Then steps 8 and 11 before the
+interview; 9–10 only if time remains.
 
 ---
 
 ## 8. Expected modified files
 
-New:
-- `orm/risk.py`: schema, writes with audit log, scoring, read models for the screens.
+New (present locally, uncommitted):
+- `orm/risk.py`: schema, writes with audit log, scoring, read models.
 - `orm/demo_data.py`: synthetic seed, citation resolver.
 - `orm/risk_report.py`: management report frame plus Excel/PDF.
-- `risk_views.py`: Risk register, KRIs, Incidents, Resilience, Report screens (render only).
+- `risk_views.py`: Risk register and Report screens (render only).
 - `tests/test_risk.py`.
 
-Modified (small):
-- `app.py`: add the "Risk" nav group; add `risk_views` to the fresh-import list.
-- `ui_theme.py`: heat-map cell, RAG pill, synthetic banner styles using existing tokens.
-- `controls_views.py`, `orm_compare.py`: one read-only "Linked risks" line (step 8 only).
+Modified (small, local):
+- `app.py`: "Risk" nav group; `risk_views` in fresh-import list.
 - `.gitignore`: `orm_risk.db`.
+
+Still expected later:
+- `controls_views.py`, `orm_compare.py`: one read-only "Linked risks" line (step 8).
+- `ui_theme.py`: only if shared tokens need a tweak (risk screens currently use scoped `.rk-*` CSS in `risk_views.py`).
 - `DESIGN.md`, `README.md`, `AGENTS.md`: document the new screens and rules.
 
 Not touched: `orm/db.py` schema, `orm/match.py`, `orm/obligations.py` logic, the pipeline, crawlers, `railway.json`, `render.yaml`, `orm_state.db` contents.
@@ -308,8 +331,8 @@ Not touched: `orm/db.py` schema, `orm/match.py`, `orm/obligations.py` logic, the
 
 None new. Everything uses packages already pinned: Streamlit, pandas, sqlite3
 (stdlib), openpyxl, the in-repo `simple_pdf`. Charts (heat map, KRI trend)
-use Streamlit's built-in Altair. Optional AI step reuses `requests` plus the
-Anthropic API with the owner's own key.
+use HTML/CSS or Streamlit's built-in Altair. Optional AI step reuses `requests`
+plus the Anthropic API with the owner's own key.
 
 ---
 
@@ -317,22 +340,23 @@ Anthropic API with the owner's own key.
 
 | Risk | Mitigation |
 |---|---|
-| New module not in `app.py` fresh-import list, so stale code is served after deploy | Add `risk_views` to `_FRESH`; `orm.*` already covered. |
-| Global CSS in `ui_theme.py` changes existing screens | New classes only (`.risk-*`); no edits to existing selectors; browser QA of Compare and Home after step 3. |
-| Seeder needs `orm.db` built; on Railway the index is built at build time | Seed lazily on first open of a Risk screen; if the index has no text, seed risks without obligation links and say so. |
+| New module not in `app.py` fresh-import list, so stale code is served after deploy | `risk_views` already added to `_FRESH` locally; `orm.*` already covered. |
+| Global CSS in `ui_theme.py` changes existing screens | Risk styles are scoped `.rk-*` inside `risk_views.py`; no edits to existing selectors required for the slice. |
+| Seeder needs `orm.db` built; on Railway the index is built at build time | Seed lazily on first open of a Risk screen (already how `_stores()` works); if the index has no text, seed risks without obligation links and say so. |
 | `okey` links go stale when regulators edit text | Show "Source text changed: re-validate"; covered by a test. |
-| Duplicate `okey` across categories (already seen once on Obligations) | Join risk links on `okey` only, de-duplicated; test for it. |
-| Fake `streamlit` in tests lacks widgets we use (`st.data_editor`, `st.dialog`, `altair_chart`) | Extend the fake in the same commit, or keep to widgets it already supports. |
+| Duplicate `okey` across categories (already seen once on Obligations) | Join risk links on `okey` only, de-duplicated; Obligations already dedupes in `audit.py`. |
+| Fake `streamlit` in tests lacks widgets we use | Risk screen tests already render via the existing fake; extend only if new widgets are added. |
 | SQLite write contention (two users editing) | Short transactions as in `state.py`; acceptable for a demo. |
 | Demo data mistaken for real data | Banner on every Risk screen, `is_synthetic` on every row, watermark in exports, fictional bank name. |
+| Accidental commit of unrelated dirty files | Commit only risk files + `app.py` + `.gitignore`; never `.streamlit 2.pid.icloud`, CSV crawl refreshes, or `.icloud` placeholders. |
 
 ---
 
 ## 11. Testing strategy
 
-- **Unit (pure functions):** inherent/residual scoring, override needs a rationale, KRI RAG both directions, appetite breach, overdue actions, impact-tolerance breach.
-- **Integrity:** every `risk_obligation.okey` exists in `orm.db`; its stored sentence hash matches the live sentence; no seeded citation is free text. An incident's notification link must point to an obligation from an indexed document.
-- **Safety:** seeding and "Reset demo" never open `orm_state.db` for writing (the test compares file hash before and after); no hard deletes; every write produces an audit row with before/after.
+- **Unit (pure functions):** inherent/residual scoring, override needs a rationale, KRI RAG both directions, appetite breach, overdue actions, impact-tolerance breach. *(covered in `test_risk.py`)*
+- **Integrity:** every `risk_obligation.okey` exists in `orm.db`; its stored sentence hash matches the live sentence; no seeded citation is free text. *(covered; also `test_real_index_links_every_demo_risk_to_quoted_text`)*
+- **Safety:** seeding and "Reset demo" never open `orm_state.db` for writing; no hard deletes; every write produces an audit row with before/after. *(covered)*
 - **Labelling:** Risk screens and both exports contain "Synthetic demonstration data"; AI suggestions render as "Suggested", never "Validated".
 - **Screens:** render each new page with the existing fake streamlit and the built-index fixture; existing 51 tests unchanged.
 - **Manual QA:** browser at 390 / 768 / 1280 px, keyboard focus, honest states; screenshot evidence before pushing.
@@ -344,9 +368,10 @@ Anthropic API with the owner's own key.
 
 1. Work in small commits on `main`; Railway auto-deploys each push (current practice).
 2. `orm_risk.db` is created and seeded at runtime. It's synthetic, so a reset on redeploy is acceptable, and a "Reset demo data" button recreates it on demand.
-3. Real data later: mount a Railway volume and set `ORM_RISK_DB` (and `ORM_STATE_DB`) to paths on it. Check this first, since the UI already warns that reviews can be lost on redeploy.
+3. Real data later: mount a Railway volume and set `ORM_RISK_DB` (and `ORM_STATE_DB`) to paths on it.
 4. No build-step changes; `railway.json` and `render.yaml` stay as they are.
 5. Rollback: revert the commit; the regulation features don't depend on the new file.
+6. **Do not deploy until tests pass and the user says go.**
 
 ---
 
@@ -354,9 +379,9 @@ Anthropic API with the owner's own key.
 
 - **No authentication today.** Any visitor can write reviews, upload controls and (after this work) edit demo risks. For the interview demo this is acceptable because the data is synthetic. Before any real use, add Streamlit's built-in OIDC login (`st.login`, no new dependency) or put the app behind the host's access control, and make the Risk screens read-only for anonymous users.
 - **Secrets:** `ANTHROPIC_API_KEY` only from the environment; never committed, logged or shown. The app makes no runtime AI calls.
-- **HTML injection:** screens use `unsafe_allow_html`. All user-entered text must pass through `ui_theme.e` (HTML escape), as the existing screens do; add a test with `<script>` in a risk title.
+- **HTML injection:** screens use `unsafe_allow_html`. All user-entered text must pass through `ui_theme.e` (HTML escape), as the existing screens do; risk tests include a `<script>` escape check.
 - **Spreadsheet formula injection:** prefix cells starting with `= + - @` in Excel exports.
-- **Data minimisation:** no personal data in the demo; owners are role names ("Head of Payments Ops (synthetic)").
+- **Data minimisation:** no personal data in the demo; owners are role names ("Head of Payments Ops").
 - **Integrity:** append-only audit log; soft deletes; citations verified against the index.
 - **AI output:** always labelled "Suggestion: verify before relying on it"; never sets `validated`; quotes must match source text verbatim (existing guardrail pattern).
 
@@ -372,3 +397,16 @@ Anthropic API with the owner's own key.
 - No authentication or roles. "Reviewer" is self-declared.
 - SQLite and Streamlit suit a single-team demo, not a multi-entity production platform. `DESIGN.md` already names Next.js + FastAPI over the same `orm/` package as the future stack.
 - The demo uses no Revolut internal information and claims none. Any resemblance of the fictional bank to a real firm is unintended.
+- Applicability assessment and back-links from Compare/Obligations are still outstanding for the polished interview path.
+
+---
+
+## 15. Decision log for the owner
+
+| Question | Recommendation |
+|---|---|
+| Rewrite in React/Next? | **No** for the interview. Stay on Streamlit; keep `orm/` as the portable logic layer. |
+| New microservice / Postgres? | **No.** Third SQLite file is enough and matches existing ops. |
+| Ship risk code now? | **Only after you say go.** Code is ready locally; production still comparison-only. |
+| Claim Revolut data? | **Never.** Banner + fictional bank name + synthetic watermark. |
+| What to demo first? | Risk register → open `RSK-001` → Regulation tab (real BOI quotes) → Controls/KRIs/Incident → Risk report export. |

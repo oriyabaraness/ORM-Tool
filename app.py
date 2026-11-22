@@ -6,11 +6,13 @@ Run with:  streamlit run app.py   (from inside the .venv)
 This file only wires screens together:
   - orm_compare.py      Home, Compare, Coverage, Gaps, Deadlines, Changes
   - controls_views.py   Obligations, Controls, Audit readiness
+  - risk_views.py       Risk register, Risk report
   - reference_views.py  Sources (catalog + PDF reader), Market context
 Design rules: DESIGN.md. Logic lives in the orm/ package.
 """
 import os
 import sys
+import threading
 
 import streamlit as st
 
@@ -22,20 +24,23 @@ if not sys.path or os.path.abspath(sys.path[0] or ".") != _APP_DIR:
     sys.path.insert(0, _APP_DIR)
 # Re-import them fresh on every run, so a long-running app server never keeps
 # an old version in memory after the code is updated (e.g. after git pull).
-_FRESH = ("orm", "orm_compare", "ui_theme", "controls_views")
-for _name in list(sys.modules):
-    if _name in _FRESH or _name.startswith("orm."):
-        del sys.modules[_name]
-
-from ui_theme import APP_NAME, apply_theme  # noqa: E402
+# Two sessions running at once share sys.modules: without the lock, one can
+# delete orm.match while the other is half-way through importing it. The lock
+# lives on `sys` because this file is re-executed on every run.
+_FRESH = ("orm", "orm_compare", "ui_theme", "controls_views", "risk_views")
+with sys.__dict__.setdefault("_clausewiz_import_lock", threading.RLock()):
+    for _name in list(sys.modules):
+        if _name in _FRESH or _name.startswith("orm."):
+            del sys.modules[_name]
+    from ui_theme import APP_NAME, apply_theme  # noqa: E402
+    import controls_views  # noqa: E402
+    import orm_compare  # noqa: E402
+    import reference_views  # noqa: E402
+    import risk_views  # noqa: E402
 
 st.set_page_config(page_title=APP_NAME,
                    page_icon=":material/account_balance:", layout="wide",
                    initial_sidebar_state="expanded")
-
-import controls_views  # noqa: E402
-import orm_compare  # noqa: E402
-import reference_views  # noqa: E402
 
 if not hasattr(orm_compare, "page_compare"):
     st.error("Loaded an outdated orm_compare from "
@@ -64,6 +69,10 @@ PAGES = {
                         icon=":material/verified_user:", url_path="controls"),
     "audit": st.Page(controls_views.page_audit, title="Audit readiness",
                      icon=":material/fact_check:", url_path="audit"),
+    "risks": st.Page(risk_views.page_risks, title="Risk register",
+                     icon=":material/report:", url_path="risks"),
+    "risk_report": st.Page(risk_views.page_report, title="Risk report",
+                           icon=":material/summarize:", url_path="risk-report"),
     "sources": st.Page(reference_views.page_sources, title="Sources",
                        icon=":material/description:", url_path="sources"),
     # Market context (reference_views.page_market: regional map, FX reserves,
@@ -72,15 +81,17 @@ PAGES = {
 }
 orm_compare.PAGES = PAGES
 controls_views.PAGES = PAGES
+risk_views.PAGES = PAGES
 
 nav = st.navigation({
     "Compare": [PAGES["home"], PAGES["compare"], PAGES["coverage"], PAGES["gaps"],
                 PAGES["deadlines"], PAGES["changes"]],
     "Controls": [PAGES["obligations"], PAGES["controls"], PAGES["audit"]],
+    "Risk": [PAGES["risks"], PAGES["risk_report"]],
     "Reference": [PAGES["sources"]],
 }, position="sidebar")
 st.sidebar.markdown(
     '<div class="app-rail-foot">Israel · Jordan · Turkey<br>'
-    'Regulation → obligation → control → evidence. Every item cites its clause.</div>',
+    'Regulation → obligation → risk → control → evidence. Every item cites its clause.</div>',
     unsafe_allow_html=True)
 nav.run()

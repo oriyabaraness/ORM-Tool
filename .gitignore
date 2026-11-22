@@ -15,6 +15,7 @@ boi_texts/*.txt.gz
 orm.db
 # Reviews, uploaded controls and the audit log (human work; see orm/state.py)
 orm_state.db
+orm_risk.db
 
 # Automatic updates (./update.sh)
 update_reports/
