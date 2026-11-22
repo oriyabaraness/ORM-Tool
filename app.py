@@ -58,9 +58,11 @@ apply_theme()
 # Wrap destination pages so interview arrival chrome can appear.
 _w = interview_views.wrap_page
 PAGES = {
+    # Default landing is "/" (Streamlit serves default=True at root; a custom
+    # url_path would 404). Sidebar title remains "Demonstration".
     "interview": st.Page(interview_views.page_interview_home,
                          title="Demonstration",
-                         icon=":material/account_tree:", url_path="demonstration",
+                         icon=":material/account_tree:",
                          default=True),
     "overview": st.Page(_w("overview", overview_views.page_overview),
                         title="Overview",
