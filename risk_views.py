@@ -24,7 +24,8 @@ APPETITE_KIND = {"Outside appetite": "gap", "Within appetite": "found",
                  "No appetite set": "na"}
 RATING_KIND = {"effective": "found", "partially_effective": "partial",
                "ineffective": "gap", "not_tested": "na"}
-BAND_KIND = {"Low": "found", "Medium": "partial", "High": "gap", "Critical": "gap"}
+BAND_KIND = {"Low": "found", "Moderate": "partial", "Medium": "partial",
+             "High": "gap", "Critical": "gap"}
 
 CSS = """
 <style>

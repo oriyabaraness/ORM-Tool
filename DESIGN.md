@@ -68,6 +68,7 @@ Primary navigation (left rail on desktop, in this order):
 | **Controls** | Control library with obligations answered per country; regulation → control → evidence chain per directive. |
 | **Audit readiness** | Upload the bank's controls, coverage, audit pack (Excel/PDF), history as of any date. |
 | **Risk register** | Synthetic operational risk register (inherent/residual, controls, KRIs, incidents). Clearly labelled demo data. |
+| **RCSA** | Risk and Control Self-Assessment workspace: 5×5 heat map, explicit residual approval, control gaps, create risk from obligation. Prototype methodology only. |
 | **Risk report** | Management risk report export (Excel/PDF) with citations and synthetic watermark. |
 | **Regulatory Intelligence** | Source library, obligation explorer, cross-jurisdiction requirement comparison, applicability review, and map-to-risk suggestions. Exact quotes stay separate from machine interpretation. |
 | ~~Market context~~ | Switched off (macro data is not part of the controls workflow); code kept in `reference_views.py`. |

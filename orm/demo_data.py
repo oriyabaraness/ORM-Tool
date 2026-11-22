@@ -19,10 +19,12 @@ import json
 
 from . import risk
 
-SEED_VERSION = "2"
+SEED_VERSION = "3"
 ACTOR = "Synthetic demo seed"
 BANK = "Demo Digital Bank Ltd (fictional)"
 CURRENCY = "ILS"
+ENTITY = "Demo Digital Bank Ltd (fictional)"
+UNIT = "Payments"
 
 SERVICES = (
     {"id": "SVC-001", "name": "Card payments",
@@ -54,41 +56,107 @@ APPETITE = (
                               "notifications."),
 )
 
+def _risk_fields(**extra):
+    """Common RCSA fields for synthetic risks. Residuals are explicit assessments."""
+    base = {
+        "business_unit": UNIT, "legal_entity": ENTITY, "jurisdiction": "IL",
+        "residual_status": "approved", "residual_approver": ACTOR,
+        "residual_evidence": "Synthetic RCSA working papers (demo only).",
+    }
+    base.update(extra)
+    return base
+
+
 RISKS = (
-    {"id": "RSK-001", "title": "Payment outage caused by a failed production change",
-     "description": "A software or configuration change to the card payment platform "
+    _risk_fields(
+        id="RSK-001", title="Payment outage caused by a failed production change",
+        description="A software or configuration change to the card payment platform "
                     "fails in production and stops authorisations.",
-     "cause": "Change deployed without adequate testing or rollback.",
-     "effect": "Customers cannot pay by card; fee refunds and complaints.",
-     "category_id": "ict_cyber", "event_type": "Business disruption and system failures",
-     "service_id": "SVC-001", "owner": "Head of Payments Engineering",
-     "inherent_likelihood": 4, "inherent_impact": 4},
-    {"id": "RSK-002", "title": "Prolonged outage at a critical cloud hosting provider",
-     "description": "The cloud provider hosting the payment platform suffers a "
+        cause="Change deployed without adequate testing or rollback.",
+        effect="Customers cannot pay by card; fee refunds and complaints.",
+        category_id="ict_cyber", event_type="Business disruption and system failures",
+        service_id="SVC-001", owner="Head of Payments Engineering",
+        business_process="Card payment authorisation",
+        cross_cutting=json.dumps(["IT and technology risk", "Change and transformation risk",
+                                  "Payments operations"]),
+        inherent_likelihood=4, inherent_impact=4,
+        impact_financial=3, impact_customer=4, impact_operational=4,
+        impact_regulatory=3, impact_reputational=3,
+        residual_likelihood=3, residual_impact=2,
+        residual_rationale="Assessor judgment after partial change-control failures; "
+                           "not an automatic reduction from control count."),
+    _risk_fields(
+        id="RSK-002", title="Prolonged outage at a critical cloud hosting provider",
+        description="The cloud provider hosting the payment platform suffers a "
                     "multi-hour regional outage.",
-     "cause": "Provider infrastructure failure; concentration on one provider.",
-     "effect": "Card payments and login unavailable until failover or recovery.",
-     "category_id": "third_party", "event_type": "Business disruption and system failures",
-     "service_id": "SVC-001", "owner": "Head of Third-Party Risk",
-     "inherent_likelihood": 3, "inherent_impact": 5},
-    {"id": "RSK-003", "title": "Late or incomplete regulatory notification of a "
-                               "technology incident",
-     "description": "A reportable technology incident is not reported to the "
+        cause="Provider infrastructure failure; concentration on one provider.",
+        effect="Card payments and login unavailable until failover or recovery.",
+        category_id="third_party", event_type="Business disruption and system failures",
+        service_id="SVC-001", owner="Head of Third-Party Risk",
+        business_process="Card payment authorisation",
+        cross_cutting=json.dumps(["Third-party and outsourcing risk",
+                                  "Operational resilience", "Payments operations"]),
+        inherent_likelihood=3, inherent_impact=5,
+        impact_financial=5, impact_customer=5, impact_operational=5,
+        impact_regulatory=4, impact_reputational=4,
+        residual_likelihood=1, residual_impact=4,
+        residual_rationale="Assessor judgment considering monitoring and partial failover."),
+    _risk_fields(
+        id="RSK-003", title="Late or incomplete regulatory notification of a "
+                            "technology incident",
+        description="A reportable technology incident is not reported to the "
                     "supervisor within the required time.",
-     "cause": "Unclear classification, no on-call compliance cover out of hours.",
-     "effect": "Breach of reporting obligations; supervisory findings.",
-     "category_id": "incident_reporting",
-     "event_type": "Execution, delivery and process management",
-     "service_id": None, "owner": "Head of Operational Risk",
-     "inherent_likelihood": 3, "inherent_impact": 4},
-    {"id": "RSK-004", "title": "Data cannot be restored after a destructive cyber attack",
-     "description": "Ransomware or a destructive attack corrupts production data and "
+        cause="Unclear classification, no on-call compliance cover out of hours.",
+        effect="Breach of reporting obligations; supervisory findings.",
+        category_id="incident_reporting",
+        event_type="Execution, delivery and process management",
+        service_id=None, owner="Head of Operational Risk",
+        business_process="Incident response and supervisory notification",
+        cross_cutting=json.dumps(["IT and technology risk", "Cybersecurity"]),
+        inherent_likelihood=3, inherent_impact=4,
+        impact_financial=2, impact_customer=2, impact_operational=3,
+        impact_regulatory=4, impact_reputational=3,
+        residual_likelihood=3, residual_impact=4,
+        residual_rationale="Notification control tested ineffective; residual kept near inherent."),
+    _risk_fields(
+        id="RSK-004", title="Data cannot be restored after a destructive cyber attack",
+        description="Ransomware or a destructive attack corrupts production data and "
                     "backups cannot restore it within tolerance.",
-     "cause": "Backups not isolated or not restore-tested.",
-     "effect": "Extended outage; loss of transaction records.",
-     "category_id": "op_resilience", "event_type": "Business disruption and system failures",
-     "service_id": "SVC-001", "owner": "Chief Information Security Officer",
-     "inherent_likelihood": 2, "inherent_impact": 5},
+        cause="Backups not isolated or not restore-tested.",
+        effect="Extended outage; loss of transaction records.",
+        category_id="op_resilience", event_type="Business disruption and system failures",
+        service_id="SVC-001", owner="Chief Information Security Officer",
+        business_process="Data backup and recovery",
+        cross_cutting=json.dumps(["Cybersecurity", "Data management",
+                                  "Operational resilience"]),
+        inherent_likelihood=2, inherent_impact=5,
+        impact_financial=5, impact_customer=5, impact_operational=5,
+        impact_regulatory=4, impact_reputational=5,
+        residual_likelihood=2, residual_impact=4,
+        residual_rationale="Restore testing effective; residual impact reduced by assessor."),
+    # Centrepiece RCSA demo risk (Feature / Part 8).
+    _risk_fields(
+        id="DEMO-RISK-001", title="Disruption of Payment Processing Services",
+        description="A critical cloud service provider experiences a regional outage "
+                    "that interrupts payment authorization and processing.",
+        cause="Third-party infrastructure failure; single-region concentration; "
+              "failed failover; inadequate recovery testing.",
+        effect="Failed customer transactions; revenue disruption; service unavailability; "
+               "customer dissatisfaction; potential regulatory reporting considerations.",
+        category_id="third_party", event_type="Business disruption and system failures",
+        service_id="SVC-001", owner="Head of Payments Operations",
+        business_process="Card payment authorisation and settlement",
+        cross_cutting=json.dumps(["Third-party and outsourcing risk",
+                                  "Operational resilience", "Payments operations",
+                                  "IT and technology risk"]),
+        inherent_likelihood=4, inherent_impact=5,
+        impact_financial=5, impact_customer=5, impact_operational=5,
+        impact_regulatory=4, impact_reputational=4,
+        residual_likelihood=3, residual_impact=4,
+        residual_rationale="Hypothetical assessed residual with synthetic evidence of "
+                           "partially effective failover testing. Not derived from control count.",
+        residual_evidence="Synthetic failed recovery test CTT-DEMO-03: failover exceeded "
+                          "RTO by 35 minutes; DNS runbook step missing."),
 )
 
 # (risk, directive, phrase that must appear in the obligation sentence, why it applies)
@@ -120,35 +188,82 @@ CONTROLS = (
     {"id": "CTL-001", "name": "Change approval and pre-release testing for payment services",
      "description": "Every production change is approved and passes tests in a test "
                     "environment before release.",
+     "objective": "Prevent untested payment changes reaching production.",
      "library_id": "ICT-06", "type": "preventive", "nature": "hybrid",
-     "frequency": "Each change", "owner": "Head of Payments Engineering"},
+     "frequency": "Each change", "owner": "Head of Payments Engineering",
+     "business_process": "Change management"},
     {"id": "CTL-002", "name": "Automated rollback of failed payment releases",
      "description": "A release that breaks health checks is rolled back automatically.",
+     "objective": "Limit customer impact when a release fails.",
      "library_id": "ICT-06", "type": "corrective", "nature": "automated",
-     "frequency": "Each release", "owner": "SRE Lead"},
+     "frequency": "Each release", "owner": "SRE Lead",
+     "business_process": "Change management"},
     {"id": "CTL-003", "name": "Failover testing for card payments",
      "description": "Failover to the second region is tested and timed against RTO.",
+     "objective": "Prove recovery within impact tolerance.",
      "library_id": "RES-03", "type": "corrective", "nature": "manual",
-     "frequency": "Semi-annually", "owner": "Head of Business Continuity"},
+     "frequency": "Semi-annually", "owner": "Head of Business Continuity",
+     "business_process": "Business continuity"},
     {"id": "CTL-004", "name": "Cloud provider exit and substitution plan",
      "description": "A documented plan to move critical workloads off the provider.",
+     "objective": "Reduce concentration on a single cloud provider.",
      "library_id": "TPR-05", "type": "corrective", "nature": "manual",
-     "frequency": "Reviewed annually", "owner": "Head of Third-Party Risk"},
+     "frequency": "Reviewed annually", "owner": "Head of Third-Party Risk",
+     "business_process": "Third-party risk"},
     {"id": "CTL-005", "name": "Critical provider SLA monitoring",
      "description": "Provider availability and SLA breaches are monitored and "
                     "reviewed monthly.",
+     "objective": "Detect third-party degradation early.",
      "library_id": "TPR-04", "type": "detective", "nature": "automated",
-     "frequency": "Monthly", "owner": "Vendor Manager"},
+     "frequency": "Monthly", "owner": "Vendor Manager",
+     "business_process": "Third-party risk"},
     {"id": "CTL-006", "name": "Regulatory incident notification procedure",
      "description": "Reportable incidents are classified and reported to the "
                     "supervisor by an on-call compliance officer.",
+     "objective": "Meet supervisory notification timelines.",
      "library_id": "INC-02", "type": "preventive", "nature": "manual",
-     "frequency": "Per incident", "owner": "Head of Compliance"},
+     "frequency": "Per incident", "owner": "Head of Compliance",
+     "business_process": "Incident response"},
     {"id": "CTL-007", "name": "Isolated backups and restore testing",
      "description": "Immutable backups are kept off-network and full restores are "
-                    "tested.", "library_id": "ICT-05", "type": "corrective",
+                    "tested.", "objective": "Recover data within RPO/RTO.",
+     "library_id": "ICT-05", "type": "corrective",
      "nature": "hybrid", "frequency": "Quarterly restore test",
-     "owner": "Chief Information Security Officer"},
+     "owner": "Chief Information Security Officer",
+     "business_process": "Data backup and recovery"},
+    # DEMO-RISK-001 suggested controls (synthetic — do not assume any real firm has them)
+    {"id": "CTL-DEMO-01", "name": "Multi-region resilience architecture (synthetic)",
+     "description": "Payment authorisation active-active across two regions.",
+     "objective": "Survive a single-region cloud outage.",
+     "library_id": "RES-03", "type": "preventive", "nature": "automated",
+     "frequency": "Continuous", "owner": "Head of Payments Engineering",
+     "business_process": "Card payment authorisation and settlement"},
+    {"id": "CTL-DEMO-02", "name": "Third-party service monitoring (synthetic)",
+     "description": "Real-time health checks on the critical cloud provider.",
+     "objective": "Detect provider degradation within minutes.",
+     "library_id": "TPR-04", "type": "detective", "nature": "automated",
+     "frequency": "Continuous", "owner": "Vendor Manager",
+     "business_process": "Card payment authorisation and settlement"},
+    {"id": "CTL-DEMO-03", "name": "Failover and recovery testing (synthetic)",
+     "description": "Scheduled failover drills timed against impact tolerance.",
+     "objective": "Prove failover meets RTO under severe but plausible scenarios.",
+     "library_id": "RES-03", "type": "detective", "nature": "manual",
+     "frequency": "Quarterly", "owner": "Head of Business Continuity",
+     "business_process": "Card payment authorisation and settlement",
+     "exceptions": "Last drill exceeded RTO; DNS step missing from runbook.",
+     "remediation_status": "open"},
+    {"id": "CTL-DEMO-04", "name": "Documented incident escalation (synthetic)",
+     "description": "Escalation tree from detection to crisis management.",
+     "objective": "Escalate P1 payment outages within 15 minutes.",
+     "library_id": "INC-02", "type": "preventive", "nature": "manual",
+     "frequency": "Per incident", "owner": "Head of Payments Operations",
+     "business_process": "Incident response"},
+    {"id": "CTL-DEMO-05", "name": "Business continuity exercises (synthetic)",
+     "description": "Tabletop and technical exercises for payment disruption.",
+     "objective": "Keep BCP current for payment processing disruption.",
+     "library_id": "RES-01", "type": "detective", "nature": "manual",
+     "frequency": "Semi-annually", "owner": "Head of Business Continuity",
+     "business_process": "Business continuity"},
 )
 
 # (control, days ago, design, operating, findings)
@@ -165,6 +280,18 @@ TESTS = (
      "INC-001's first report took 2 h 35 min against the internal 2 h target; "
      "no deputy on-call cover."),
     ("CTL-007", 60, "effective", "effective", "Full restore completed in 3 h."),
+    ("CTL-DEMO-01", 40, "effective", "effective",
+     "Synthetic: dual-region routing verified in lab."),
+    ("CTL-DEMO-02", 10, "effective", "effective",
+     "Synthetic: provider health checks alerted within 3 minutes."),
+    ("CTL-DEMO-03", 25, "effective", "partially_effective",
+     "Synthetic failed recovery test: failover completed 35 minutes after RTO; "
+     "manual DNS step was not in the runbook. Documentation alone is not "
+     "operating effectiveness."),
+    ("CTL-DEMO-04", 18, "effective", "effective",
+     "Synthetic: escalation tree exercised in tabletop."),
+    ("CTL-DEMO-05", 90, "effective", "not_tested",
+     "Synthetic: BCP exercise scheduled but not yet run this half-year."),
 )
 
 RISK_CONTROLS = (
@@ -173,6 +300,11 @@ RISK_CONTROLS = (
     ("RSK-002", "CTL-004", "impact"),
     ("RSK-003", "CTL-006", "likelihood"),
     ("RSK-004", "CTL-007", "impact"), ("RSK-004", "CTL-003", "impact"),
+    ("DEMO-RISK-001", "CTL-DEMO-01", "impact"),
+    ("DEMO-RISK-001", "CTL-DEMO-02", "likelihood"),
+    ("DEMO-RISK-001", "CTL-DEMO-03", "impact"),
+    ("DEMO-RISK-001", "CTL-DEMO-04", "likelihood"),
+    ("DEMO-RISK-001", "CTL-DEMO-05", "impact"),
 )
 
 # six monthly readings, oldest first
@@ -264,8 +396,10 @@ def seed(conn, index_conn=None, *, today: dt.date | None = None) -> dict:
                          "statement": statement, "approved_by": "Board Risk Committee",
                          "approved_at": (today - dt.timedelta(days=90)).isoformat(), **syn})
     for r in RISKS:
-        add("risk", {**r, **syn, "assessed_at": (today - dt.timedelta(days=14)).isoformat(),
-                     "next_review_at": (today + dt.timedelta(days=76)).isoformat()})
+        add("risk", {**r, **syn,
+                     "assessed_at": (today - dt.timedelta(days=14)).isoformat(),
+                     "next_review_at": (today + dt.timedelta(days=76)).isoformat(),
+                     "residual_approved_at": risk.now()})
     linked, missing = 0, []
     for risk_id, doc, phrase, why in OBLIGATION_LINKS:
         found = find_obligation(index_conn, doc, phrase)
@@ -282,12 +416,41 @@ def seed(conn, index_conn=None, *, today: dt.date | None = None) -> dict:
     for c in CONTROLS:
         add("control", {**c, **syn, "key_control": 1})
     for i, (cid, days, design, operating, findings) in enumerate(TESTS, 1):
-        add("control_test", {"id": f"CTT-{i:03d}", "control_id": cid,
+        tid = f"CTT-DEMO-{i - 7:02d}" if cid.startswith("CTL-DEMO") else f"CTT-{i:03d}"
+        add("control_test", {"id": tid, "control_id": cid,
                              "tested_at": (today - dt.timedelta(days=days)).isoformat(),
                              "tester": "Second line, Operational Risk",
                              "design_rating": design, "operating_rating": operating,
-                             "findings": findings, "evidence_ref": f"Test file CTT-{i:03d}",
+                             "findings": findings, "evidence_ref": f"Test file {tid}",
                              **syn})
+    # Obligation link for the centrepiece demo risk (cloud accountability).
+    demo_obl = find_obligation(index_conn, "IL-BOI-PC-362",
+                               "cloud-computing service provider is accountable")
+    if demo_obl:
+        add("risk_obligation", {
+            "risk_id": "DEMO-RISK-001", "okey": demo_obl["okey"],
+            "document_id": demo_obl["document_id"], "clause_ref": demo_obl["clause_ref"],
+            "citation": demo_obl["citation"], "link": demo_obl["link"],
+            "sentence": demo_obl["sentence"],
+            "sentence_sha": risk.sentence_sha(demo_obl["sentence"]),
+            "rationale": "Cloud accountability underpins the payment-outage scenario.",
+            **syn, "validation_status": "suggested"})
+        linked += 1
+    else:
+        missing.append('DEMO-RISK-001: IL-BOI-PC-362 “cloud-computing service provider '
+                       'is accountable”')
+    demo_obl2 = find_obligation(index_conn, "IL-BOI-PC-355",
+                                "test national and other scenarios")
+    if demo_obl2:
+        add("risk_obligation", {
+            "risk_id": "DEMO-RISK-001", "okey": demo_obl2["okey"],
+            "document_id": demo_obl2["document_id"], "clause_ref": demo_obl2["clause_ref"],
+            "citation": demo_obl2["citation"], "link": demo_obl2["link"],
+            "sentence": demo_obl2["sentence"],
+            "sentence_sha": risk.sentence_sha(demo_obl2["sentence"]),
+            "rationale": "Scenario testing of continuity arrangements.",
+            **syn, "validation_status": "suggested"})
+        linked += 1
     for risk_id, cid, reduces in RISK_CONTROLS:
         add("risk_control", {"risk_id": risk_id, "control_id": cid, "reduces": reduces})
     periods = _months(today.replace(day=1) - dt.timedelta(days=1), 6)
@@ -356,8 +519,26 @@ def seed(conn, index_conn=None, *, today: dt.date | None = None) -> dict:
          "title": "Add the manual DNS step to the failover runbook",
          "owner": "Head of Business Continuity", "due_at": day(-20), "status": "done",
          "closed_at": day(-22), "closure_evidence": "Runbook v4.2"},
+        {"id": "ACT-DEMO-01", "source_kind": "risk", "source_id": "DEMO-RISK-001",
+         "title": "Re-run payment failover drill and fix the DNS runbook gap",
+         "owner": "Head of Business Continuity", "due_at": day(14), "status": "open"},
+        {"id": "ACT-DEMO-02", "source_kind": "control_test", "source_id": "CTT-DEMO-03",
+         "title": "Document and retest the failed recovery scenario for DEMO-RISK-001",
+         "owner": "Head of Payments Operations", "due_at": day(-2), "status": "open"},
     ):
         add("action", {**a, **syn})
+    # KRI for the centrepiece demo risk
+    add("kri", {"id": "KRI-DEMO-01", "risk_id": "DEMO-RISK-001",
+                "name": "Payment authorisation success rate",
+                "definition": "Successful card authorisations ÷ attempts (synthetic).",
+                "unit": "%", "direction": "lower_is_worse", "green_limit": 99.9,
+                "amber_limit": 99.5, "frequency": "Monthly",
+                "data_source": "Synthetic monitoring", "owner": "Head of Payments Operations",
+                **syn})
+    for period, value in zip(periods, (99.96, 99.94, 99.95, 99.91, 99.88, 99.40)):
+        add("kri_reading", {"kri_id": "KRI-DEMO-01", "period": period, "value": value,
+                            "entered_by": ACTOR, "entered_at": risk.now(),
+                            "is_synthetic": 1})
 
     risk.set_meta(conn, "dataset", "synthetic_demo")
     risk.set_meta(conn, "bank", BANK)

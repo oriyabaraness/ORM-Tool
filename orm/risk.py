@@ -177,13 +177,22 @@ EVENT_TYPES = (
     "Business disruption and system failures",
     "Execution, delivery and process management",
 )
-RATINGS = ("effective", "partially_effective", "ineffective", "not_tested")
+CROSS_CUTTING = (
+    "IT and technology risk",
+    "Cybersecurity",
+    "Third-party and outsourcing risk",
+    "Model and AI risk",
+    "Change and transformation risk",
+    "Operational resilience",
+    "Payments operations",
+    "Data management",
+)
+RATINGS = ("effective", "partially_effective", "ineffective", "not_tested", "not_assessed")
 RATING_LABEL = {"effective": "Effective", "partially_effective": "Partially effective",
-                "ineffective": "Ineffective", "not_tested": "Not tested"}
-METHOD_NOTE = ("Illustrative 5×5 method for demonstration, not a bank's approved "
-               "framework. Score = likelihood × impact (1 to 25). Residual = inherent "
-               "lowered by the weakest key control on each side: effective by 2 "
-               "levels, partially effective by 1, ineffective or not tested by 0.")
+                "ineffective": "Ineffective", "not_tested": "Not tested",
+                "not_assessed": "Not assessed"}
+DESIGN_RATINGS = ("effective", "partially_effective", "ineffective", "not_assessed")
+OPERATING_RATINGS = ("effective", "partially_effective", "ineffective", "not_tested")
 
 
 def default_path() -> str:
@@ -194,6 +203,46 @@ def now() -> str:
     return dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
 
 
+# Columns added after the first schema; applied with ALTER TABLE so existing
+# orm_risk.db files keep their data.
+_RISK_EXTRA = {
+    "business_process": "TEXT",
+    "business_unit": "TEXT",
+    "legal_entity": "TEXT",
+    "jurisdiction": "TEXT",
+    "cross_cutting": "TEXT",          # JSON list of cross-cutting labels
+    "impact_financial": "INTEGER",
+    "impact_customer": "INTEGER",
+    "impact_operational": "INTEGER",
+    "impact_regulatory": "INTEGER",
+    "impact_reputational": "INTEGER",
+    "residual_likelihood": "INTEGER",
+    "residual_impact": "INTEGER",
+    "residual_rationale": "TEXT",
+    "residual_evidence": "TEXT",
+    "residual_approver": "TEXT",
+    "residual_approved_at": "TEXT",
+    "residual_status": "TEXT DEFAULT 'not_assessed'",  # not_assessed|suggested|approved
+}
+_CONTROL_EXTRA = {
+    "objective": "TEXT",
+    "business_process": "TEXT",
+    "exceptions": "TEXT",
+    "remediation_status": "TEXT",
+}
+
+
+def migrate(conn: sqlite3.Connection) -> None:
+    """Add RCSA columns if missing. Never drops or renames existing columns."""
+    def add(table: str, cols: dict[str, str]) -> None:
+        have = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+        for name, decl in cols.items():
+            if name not in have:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
+    add("risk", _RISK_EXTRA)
+    add("control", _CONTROL_EXTRA)
+
+
 @contextmanager
 def session(path: str | None = None):
     path = path or default_path()
@@ -202,6 +251,7 @@ def session(path: str | None = None):
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.executescript(SCHEMA)
+    migrate(conn)
     try:
         yield conn
         conn.commit()
@@ -308,26 +358,99 @@ def history(conn, table: str | None = None, object_id: str | None = None,
 
 def set_residual_override(conn, risk_id: str, likelihood: int | None, impact: int | None,
                           rationale: str, *, actor: str) -> dict:
-    """An assessor's own residual rating. A reason is required."""
+    """Legacy helper: stores residual as an override. Prefer approve_residual."""
     if (likelihood or impact) and not (rationale or "").strip():
         raise ValueError("An override needs a rationale.")
     for v in (likelihood, impact):
         if v is not None and not 1 <= int(v) <= 5:
             raise ValueError("Ratings run from 1 to 5.")
-    return update(conn, "risk", risk_id,
-                  {"override_likelihood": likelihood, "override_impact": impact,
-                   "override_rationale": (rationale or "").strip() or None}, actor=actor)
+    changes = {"override_likelihood": likelihood, "override_impact": impact,
+               "override_rationale": (rationale or "").strip() or None}
+    if likelihood is not None and impact is not None:
+        changes.update(residual_likelihood=int(likelihood), residual_impact=int(impact),
+                       residual_rationale=(rationale or "").strip(),
+                       residual_approver=actor or "", residual_approved_at=now(),
+                       residual_status="approved")
+    return update(conn, "risk", risk_id, changes, actor=actor)
+
+
+def approve_residual(conn, risk_id: str, likelihood: int, impact: int, *,
+                     rationale: str, evidence: str = "", actor: str) -> dict:
+    """Record an explicit residual assessment. Controls never auto-write this."""
+    if not (rationale or "").strip():
+        raise ValueError("Residual assessment needs a rationale and a named approver.")
+    if not (actor or "").strip():
+        raise ValueError("Residual assessment needs a named approver.")
+    for v in (likelihood, impact):
+        if not 1 <= int(v) <= 5:
+            raise ValueError("Ratings run from 1 to 5.")
+    return update(conn, "risk", risk_id, {
+        "residual_likelihood": int(likelihood),
+        "residual_impact": int(impact),
+        "residual_rationale": rationale.strip(),
+        "residual_evidence": (evidence or "").strip(),
+        "residual_approver": actor.strip(),
+        "residual_approved_at": now(),
+        "residual_status": "approved",
+        "override_likelihood": int(likelihood),
+        "override_impact": int(impact),
+        "override_rationale": rationale.strip(),
+        "assessed_at": _today(),
+    }, actor=actor)
 
 
 # --- scoring -----------------------------------------------------------------------
 
-BANDS = ((4, "Low"), (9, "Medium"), (16, "High"), (25, "Critical"))
-_STEP = {"effective": 2, "partially_effective": 1, "ineffective": 0, "not_tested": 0}
-_ORDER = {"effective": 3, "partially_effective": 2, "ineffective": 1, "not_tested": 0}
+# Configurable band ceilings (inclusive). Defaults are illustrative only.
+BANDS = ((4, "Low"), (9, "Moderate"), (16, "High"), (25, "Critical"))
+LIKELIHOOD_LABELS = {
+    1: "Rare", 2: "Unlikely", 3: "Possible", 4: "Likely", 5: "Almost certain",
+}
+IMPACT_LABELS = {
+    1: "Insignificant", 2: "Minor", 3: "Moderate", 4: "Major", 5: "Severe",
+}
+IMPACT_DIMENSIONS = (
+    "financial", "customer", "operational", "regulatory", "reputational",
+)
+_STEP = {"effective": 2, "partially_effective": 1, "ineffective": 0,
+         "not_tested": 0, "not_assessed": 0}
+_ORDER = {"effective": 3, "partially_effective": 2, "ineffective": 1,
+          "not_tested": 0, "not_assessed": 0}
+
+METHOD_NOTE = (
+    "Illustrative 5×5 RCSA method for demonstration — not any bank's approved "
+    "framework and not Revolut's. Score = likelihood × impact (1 to 25). "
+    "Bands: 1–4 Low, 5–9 Moderate, 10–16 High, 17–25 Critical. "
+    "Multi-dimensional impact uses the highest rated dimension (financial, "
+    "customer, operational, regulatory, reputational). Residual risk is set "
+    "by a named assessor; controls never reduce the score automatically."
+)
 
 
-def band(score: int) -> str:
-    return next(label for top, label in BANDS if score <= top)
+def band(score: int, bands: tuple[tuple[int, str], ...] | None = None) -> str:
+    bands = bands or BANDS
+    return next(label for top, label in bands if score <= top)
+
+
+def inherent_score(likelihood: int, impact: int) -> int:
+    return int(likelihood) * int(impact)
+
+
+def aggregate_impact(dimensions: dict[str, int | None] | None,
+                     method: str = "max") -> int | None:
+    """Combine dimensional impact ratings. Demo default: highest applicable."""
+    if not dimensions:
+        return None
+    vals = [int(v) for v in dimensions.values()
+            if v is not None and str(v).strip() not in ("", "nan")]
+    vals = [v for v in vals if 1 <= v <= 5]
+    if not vals:
+        return None
+    if method == "max":
+        return max(vals)
+    if method == "average":
+        return int(round(sum(vals) / len(vals)))
+    raise ValueError(f"Unknown impact aggregation method: {method}")
 
 
 def combined_rating(design: str | None, operating: str | None) -> str:
@@ -486,12 +609,28 @@ def register(conn, today: str | None = None) -> pd.DataFrame:
         controls = [(ctl.loc[c, "rating"], reduces, bool(ctl.loc[c, "key_control"]))
                     for c, reduces in zip(mine["control_id"], mine["reduces"])
                     if c in ctl.index]
-        rl, ri = residual(int(r["inherent_likelihood"]), int(r["inherent_impact"]), controls)
-        overridden = not pd.isna(r["override_likelihood"]) or not pd.isna(r["override_impact"])
-        if not pd.isna(r["override_likelihood"]):
-            rl = int(r["override_likelihood"])
-        if not pd.isna(r["override_impact"]):
-            ri = int(r["override_impact"])
+        dims = {d: r.get(f"impact_{d}") for d in IMPACT_DIMENSIONS}
+        agg = aggregate_impact(dims, "max")
+        inh_l = int(r["inherent_likelihood"])
+        inh_i = int(agg if agg is not None else r["inherent_impact"])
+        suggested_l, suggested_i = residual(inh_l, inh_i, controls)
+        status = (r.get("residual_status") or "not_assessed") or "not_assessed"
+        assessed = False
+        if status == "approved" and not pd.isna(r.get("residual_likelihood")) \
+                and not pd.isna(r.get("residual_impact")):
+            rl, ri = int(r["residual_likelihood"]), int(r["residual_impact"])
+            assessed = True
+        elif not pd.isna(r.get("override_likelihood")) or not pd.isna(r.get("override_impact")):
+            rl = (int(r["override_likelihood"]) if not pd.isna(r.get("override_likelihood"))
+                  else suggested_l)
+            ri = (int(r["override_impact"]) if not pd.isna(r.get("override_impact"))
+                  else suggested_i)
+            assessed = True
+            status = "approved"
+        else:
+            # Suggestion only — never treat control existence as residual.
+            rl, ri = suggested_l, suggested_i
+            status = "suggested"
         my_kris = kris[kris["risk_id"] == r["id"]]
         reds = int((my_kris["rag"] == "Red").sum())
         ambers = int((my_kris["rag"] == "Amber").sum())
@@ -505,18 +644,28 @@ def register(conn, today: str | None = None) -> pd.DataFrame:
             "category": taxonomy.BY_ID[r["category_id"]].name
             if r["category_id"] in taxonomy.BY_ID else r["category_id"],
             "event_type": r["event_type"], "service": r["service_name"] or "",
+            "business_process": r.get("business_process") or "",
+            "business_unit": r.get("business_unit") or "",
+            "legal_entity": r.get("legal_entity") or "",
+            "jurisdiction": r.get("jurisdiction") or "",
+            "cross_cutting": r.get("cross_cutting") or "[]",
             "owner": r["owner"] or "",
-            "inherent_likelihood": int(r["inherent_likelihood"]),
-            "inherent_impact": int(r["inherent_impact"]),
-            "inherent_score": int(r["inherent_likelihood"]) * int(r["inherent_impact"]),
+            "inherent_likelihood": inh_l, "inherent_impact": inh_i,
+            "inherent_score": inherent_score(inh_l, inh_i),
+            "impact_aggregation": "max",
             "residual_likelihood": rl, "residual_impact": ri, "residual_score": rl * ri,
-            "residual_overridden": overridden,
+            "suggested_residual_likelihood": suggested_l,
+            "suggested_residual_impact": suggested_i,
+            "suggested_residual_score": suggested_l * suggested_i,
+            "residual_assessed": assessed, "residual_status": status,
+            "residual_overridden": assessed,
             "appetite_limit": limit,
             "appetite": ("Outside appetite" if outside else
                          "Within appetite" if limit is not None else "No appetite set"),
             "kri_red": reds, "kri_amber": ambers,
             "controls": len(controls),
             "weak_controls": sum(1 for c in controls if c[0] != "effective"),
+            "untested_controls": sum(1 for c in controls if c[0] in ("not_tested", "not_assessed")),
             "obligations": int(obl.get(r["id"], 0)),
             "open_incidents": int(((inc_links["risk_id"] == r["id"])
                                    & (inc_links["status"] != "closed")).sum())
