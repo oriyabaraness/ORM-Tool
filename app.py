@@ -1,14 +1,10 @@
 """
-Clausewiz -- regulatory risk comparison and controls workspace (Streamlit).
+Clausewiz -- regulatory risk comparison and operational risk workspace.
 
 Run with:  streamlit run app.py   (from inside the .venv)
 
-This file only wires screens together:
-  - orm_compare.py      Home, Compare, Coverage, Gaps, Deadlines, Changes
-  - controls_views.py   Obligations, Controls, Audit readiness
-  - risk_views.py       Risk register, Risk report
-  - reference_views.py  Sources (catalog + PDF reader), Market context
-Design rules: DESIGN.md. Logic lives in the orm/ package.
+This file wires screens and Demo Mode. Design rules: DESIGN.md.
+Logic lives in the orm/ package.
 """
 import os
 import sys
@@ -16,20 +12,13 @@ import threading
 
 import streamlit as st
 
-# Always load this project's own modules from this folder, even if another
-# copy of the project (or a stale module with the same name) is on Python's
-# path -- otherwise an older orm_compare / orm could be picked up instead.
 _APP_DIR = os.path.dirname(os.path.abspath(__file__))
 if not sys.path or os.path.abspath(sys.path[0] or ".") != _APP_DIR:
     sys.path.insert(0, _APP_DIR)
-# Re-import them fresh on every run, so a long-running app server never keeps
-# an old version in memory after the code is updated (e.g. after git pull).
-# Two sessions running at once share sys.modules: without the lock, one can
-# delete orm.match while the other is half-way through importing it. The lock
-# lives on `sys` because this file is re-executed on every run.
+
 _FRESH = ("orm", "orm_compare", "ui_theme", "controls_views", "risk_views",
           "regulatory_views", "rcsa_views", "kri_views", "incident_views",
-          "resilience_views", "exec_report_views")
+          "resilience_views", "exec_report_views", "overview_views")
 with sys.__dict__.setdefault("_clausewiz_import_lock", threading.RLock()):
     for _name in list(sys.modules):
         if _name in _FRESH or _name.startswith("orm."):
@@ -40,11 +29,13 @@ with sys.__dict__.setdefault("_clausewiz_import_lock", threading.RLock()):
     import incident_views  # noqa: E402
     import kri_views  # noqa: E402
     import orm_compare  # noqa: E402
+    import overview_views  # noqa: E402
     import rcsa_views  # noqa: E402
     import reference_views  # noqa: E402
     import regulatory_views  # noqa: E402
     import resilience_views  # noqa: E402
     import risk_views  # noqa: E402
+    from orm import demo_mode  # noqa: E402
 
 st.set_page_config(page_title=APP_NAME,
                    page_icon=":material/account_balance:", layout="wide",
@@ -56,11 +47,17 @@ if not hasattr(orm_compare, "page_compare"):
              f"Expected {os.path.join(_APP_DIR, 'orm_compare.py')}.")
     st.stop()
 
+# Demo Mode isolates ORM_RISK_DB before any page opens a risk session.
+demo_mode.apply_env(st.session_state)
+
 apply_theme()
 
 PAGES = {
+    "overview": st.Page(overview_views.page_overview, title="Overview",
+                        icon=":material/dashboard:", url_path="overview",
+                        default=True),
     "home": st.Page(orm_compare.page_home, title="Home",
-                    icon=":material/home:", url_path="home", default=True),
+                    icon=":material/home:", url_path="home"),
     "compare": st.Page(orm_compare.page_compare, title="Compare",
                        icon=":material/compare_arrows:", url_path="compare"),
     "coverage": st.Page(orm_compare.page_coverage, title="Coverage",
@@ -81,9 +78,9 @@ PAGES = {
                      icon=":material/report:", url_path="risks"),
     "rcsa": st.Page(rcsa_views.page_rcsa, title="RCSA",
                     icon=":material/grid_on:", url_path="rcsa"),
-    "kri": st.Page(kri_views.page_kri, title="KRI & Appetite",
+    "kri": st.Page(kri_views.page_kri, title="KRI Monitoring",
                    icon=":material/monitoring:", url_path="kri"),
-    "incidents": st.Page(incident_views.page_incidents, title="Incidents & Loss",
+    "incidents": st.Page(incident_views.page_incidents, title="Incident Management",
                          icon=":material/emergency:", url_path="incidents"),
     "resilience": st.Page(resilience_views.page_resilience,
                           title="Operational Resilience",
@@ -99,10 +96,9 @@ PAGES = {
                           icon=":material/policy:", url_path="regulatory"),
     "sources": st.Page(reference_views.page_sources, title="Sources",
                        icon=":material/description:", url_path="sources"),
-    # Market context (reference_views.page_market: regional map, FX reserves,
-    # rates) is switched off: macro data is not part of the controls workflow.
-    # To bring it back, add an st.Page for it here and list it under Reference.
 }
+
+# Share page map for switch_page / guided tour
 orm_compare.PAGES = PAGES
 controls_views.PAGES = PAGES
 risk_views.PAGES = PAGES
@@ -112,18 +108,37 @@ incident_views.PAGES = PAGES
 resilience_views.PAGES = PAGES
 exec_report_views.PAGES = PAGES
 regulatory_views.PAGES = PAGES
+overview_views.PAGES = PAGES
 
+# Sidebar IA follows the operational risk lifecycle (DESIGN.md).
 nav = st.navigation({
-    "Compare": [PAGES["home"], PAGES["compare"], PAGES["coverage"], PAGES["gaps"],
-                PAGES["deadlines"], PAGES["changes"]],
-    "Controls": [PAGES["obligations"], PAGES["controls"], PAGES["audit"]],
-    "Risk": [PAGES["risks"], PAGES["rcsa"], PAGES["kri"], PAGES["incidents"],
-             PAGES["resilience"], PAGES["risk_report"], PAGES["executive"],
-             PAGES["regulatory"]],
-    "Reference": [PAGES["sources"]],
+    "Overview": [PAGES["overview"]],
+    "Regulatory Intelligence": [
+        PAGES["regulatory"], PAGES["obligations"], PAGES["sources"],
+    ],
+    "Compare": [
+        PAGES["home"], PAGES["compare"], PAGES["coverage"], PAGES["gaps"],
+        PAGES["deadlines"], PAGES["changes"],
+    ],
+    "Risk Register": [PAGES["risks"]],
+    "Controls & RCSA": [PAGES["controls"], PAGES["rcsa"], PAGES["audit"]],
+    "KRI Monitoring": [PAGES["kri"]],
+    "Incident Management": [PAGES["incidents"]],
+    "Operational Resilience": [PAGES["resilience"]],
+    "Management Reporting": [PAGES["executive"], PAGES["risk_report"]],
 }, position="sidebar")
+
+overview_views.render_sidebar_demo_controls(PAGES)
+
 st.sidebar.markdown(
     '<div class="app-rail-foot">Israel · Jordan · Turkey<br>'
-    'Regulation → obligation → risk → control → evidence. Every item cites its clause.</div>',
+    'Obligation → risk → control → KRI → incident → report.<br>'
+    'Every claim cites its source.</div>',
     unsafe_allow_html=True)
+
+# Persistent demo banner on every page when Demo Mode is on
+if demo_mode.is_enabled(st.session_state):
+    from ui_theme import demo_banner_html
+    st.markdown(demo_banner_html(demo_mode.DEMO_BANNER), unsafe_allow_html=True)
+
 nav.run()

@@ -90,7 +90,12 @@ code {font-size: 12.5px; background: var(--subtle); color: var(--ink); padding: 
   border-bottom: 1px solid rgba(255,255,255,.35);
 }
 [data-testid="stSidebarNav"] [data-testid="stNavSectionHeader"],
-[data-testid="stSidebarNav"] header {display: none;}
+[data-testid="stSidebarNav"] header {
+  display: block !important; color: rgba(255,255,255,.45) !important;
+  font-size: 10px !important; font-weight: 600 !important;
+  letter-spacing: 0.06em !important; text-transform: uppercase !important;
+  margin: 14px 16px 4px !important; padding: 0 !important;
+}
 [data-testid="stSidebarNavLink"] [data-testid="stIconMaterial"] {display: none;}
 [data-testid="stSidebarNavLink"] {border-radius: 8px; padding: 7px 12px; margin: 1px 8px;}
 [data-testid="stSidebarNavLink"] span:not([data-testid="stIconMaterial"]) {
@@ -248,6 +253,61 @@ mark {background: var(--highlight); color: inherit; padding: 0 1px; border-radiu
   [data-baseweb="tab-list"] {gap: 14px; overflow-x: auto;}
   [data-testid="stDataFrame"], [data-testid="stTable"] {overflow-x: auto;}
 }
+
+/* ---- dark theme (system preference) -------------------------------- */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #e8eef5; --ink-2: #a8b3c2; --ink-3: #7a8698;
+    --line: #2a3544; --surface: #141c27; --canvas: #0b1118; --subtle: #121a24;
+    --primary: #8b85ff; --primary-hover: #c5c0ff; --focus: #8b85ff;
+    --found: #3dba7a; --found-bg: #143024;
+    --partial: #d4a017; --partial-bg: #2a2208;
+    --gap: #f07167; --gap-bg: #3a1614;
+    --na: #8a96a8; --na-bg: #121a24;
+    --highlight: #4a3f12;
+  }
+  html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
+    background: var(--canvas); color: var(--ink);
+  }
+  [data-testid="stHeader"] {background: rgba(11,17,24,.92);}
+  div[data-baseweb="select"] > div, div[data-baseweb="input"],
+  div[data-baseweb="textarea"] {
+    background: var(--surface) !important; border-color: var(--line) !important;
+    color: var(--ink) !important;
+  }
+}
+
+/* ---- overview + demo tour ------------------------------------------ */
+.ov-cards {display: grid; grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px; margin: 4px 0 14px;}
+.ov-card {border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px;
+  background: var(--surface);}
+.ov-card .n {font-size: 20px; font-weight: 600; color: var(--ink);
+  font-variant-numeric: tabular-nums; line-height: 1.1;}
+.ov-card .l {font-size: 11px; color: var(--ink-3); margin-top: 4px; line-height: 1.3;}
+.ov-card.alert .n {color: var(--gap);}
+.demo-banner {position: sticky; top: 0; z-index: 40;
+  background: var(--partial-bg); border: 1px solid #e0c56a; color: #5c4300;
+  padding: 8px 12px; border-radius: 8px; font-size: 12.5px; margin: 0 0 12px;
+  display: flex; gap: 10px; align-items: flex-start;}
+.demo-banner b {color: inherit;}
+.tour-chrome {border: 1px solid var(--line); border-radius: 10px;
+  background: var(--surface); padding: 12px 14px; margin: 0 0 14px;}
+.tour-chrome .step {font-size: 11px; color: var(--ink-3); font-weight: 600;
+  letter-spacing: 0.04em; text-transform: uppercase;}
+.tour-chrome h3 {margin: 4px 0 4px !important; font-size: 15px !important;}
+.tour-chrome p {margin: 0; font-size: 13px; color: var(--ink-2);}
+.tour-chrome .focus {font-size: 12px; color: var(--ink-3); margin-top: 6px;}
+.empty-state {border: 1px dashed var(--line); border-radius: 10px;
+  padding: 18px 16px; background: var(--surface); color: var(--ink-2);
+  font-size: 13.5px; margin: 8px 0 12px;}
+.empty-state b {color: var(--ink); display: block; margin-bottom: 4px; font-weight: 600;}
+@media (max-width: 1100px) {
+  .ov-cards {grid-template-columns: repeat(3, minmax(0, 1fr));}
+}
+@media (max-width: 640px) {
+  .ov-cards {grid-template-columns: repeat(2, minmax(0, 1fr));}
+}
 </style>
 """
 
@@ -295,3 +355,17 @@ def citation(regulator: str, doc_ref: str, clause_ref: str, title: str,
     open_link = (f'<a href="{e(link)}" target="_blank">Open in source ↗</a>'
                  if link else "")
     return f'<div class="cite">{" · ".join(parts)}{open_link}</div>'
+
+def empty_state(title: str, body: str = "") -> str:
+    """Useful empty state — title + optional guidance."""
+    sub = f"<div>{body}</div>" if body else ""
+    return f'<div class="empty-state" role="status"><b>{e(title)}</b>{sub}</div>'
+
+
+def demo_banner_html(message: str = "") -> str:
+    msg = message or (
+        "Demo Mode — Synthetic Data. Hypothetical digital-payments entity. "
+        "Not Revolut. Live user risk data is not modified.")
+    return (f'<div class="demo-banner" role="status"><div><b>Demo Mode — Synthetic Data</b><br>'
+            f'{e(msg)}</div></div>')
+

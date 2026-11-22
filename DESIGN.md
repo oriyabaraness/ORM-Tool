@@ -47,35 +47,52 @@ Everything below serves those three.
 
 ## Information architecture
 
-**Approved exception: Home.** The app opens on a Home screen: a country
-dropdown at the top and one card per risk category (clause count, or "No
-indexed text"). A card opens Compare scoped to that country and category.
-This is a way into the workflow, not a reading library: no shelves, no
-"Browse the Library", no Sefaria references, no hero or marketing copy.
+Navigation follows the **operational risk lifecycle**. The default landing
+screen is **Overview** (risk snapshot). The original country → category Home
+into Compare remains under **Compare** (approved exception: no library
+shelves, no hero marketing).
 
-Primary navigation (left rail on desktop, in this order):
+**Demo Mode — Synthetic Data** (sidebar toggle) points `ORM_RISK_DB` at an
+isolated demo SQLite file, shows a persistent banner, and supports a five-step
+guided interview tour. Reset deletes only the demo file — never live user data.
+Demo content is never described as Revolut data.
+
+Primary navigation (left rail, sectioned):
+
+| Section | Items |
+|---|---|
+| **Overview** | Operational risk snapshot, heat map, KRI trends, priority actions, regulatory changes, recent events. |
+| **Regulatory Intelligence** | Regulatory Intelligence, Obligations, Sources. |
+| **Compare** | Home (country × category entry), Compare, Coverage, Gaps, Deadlines, Changes. |
+| **Risk Register** | Risk register. |
+| **Controls & RCSA** | Controls, RCSA, Audit readiness. |
+| **KRI Monitoring** | KRI & Appetite. |
+| **Incident Management** | Incidents & Loss. |
+| **Operational Resilience** | Operational Resilience. |
+| **Management Reporting** | Executive report, Risk report. |
 
 | Item | Purpose |
 |---|---|
-| **Home** | Country dropdown and risk-category cards (the approved exception above). The default screen. |
+| **Overview** | Lifecycle dashboard from live application metrics only. Default screen. |
+| **Home** | Country dropdown and risk-category cards into Compare (approved exception). |
 | **Compare** | The clause-comparison workspace. |
-| **Coverage** | Countries × risk categories matrix: how much each country regulates each area. |
-| **Gaps** | Baseline expectations per category: found / not found / not assessed, per country. Exportable. |
-| **Deadlines** | Every extracted reporting deadline and review frequency, normalized and comparable. |
-| **Changes** | New and amended regulations since a date (future; drives alerts). |
-| **Sources** | The document library: catalog, PDF reader, search. Secondary, for when users need the original. |
-| **Obligations** | Every duty as a checklist item (who, what, deadline, frequency, evidence, source). Approve, correct, reject; pick the control. |
-| **Controls** | Control library with obligations answered per country; regulation → control → evidence chain per directive. |
-| **Audit readiness** | Upload the bank's controls, coverage, audit pack (Excel/PDF), history as of any date. |
-| **Risk register** | Synthetic operational risk register (inherent/residual, controls, KRIs, incidents). Clearly labelled demo data. |
-| **RCSA** | Risk and Control Self-Assessment workspace: 5×5 heat map, explicit residual approval, control gaps, create risk from obligation. Prototype methodology only. |
-| **KRI & Appetite** | Key risk indicators, appetite/tolerance statements, breach escalations and trends. Synthetic observations; no automatic external alerts. |
-| **Incidents & Loss** | Operational incident lifecycle, loss events, root-cause investigation, remediation with independent validation, and regulatory reporting assessment. Synthetic demo labelled; no automatic notification decisions. |
-| **Operational Resilience** | Important business services, dependency mapping, BIA, and severe-but-plausible scenario analysis with deterministic impact-tolerance testing. Synthetic; never invents approved tolerances. |
-| **Risk report** | Management risk report export (Excel/PDF) with citations and synthetic watermark. |
-| **Executive report** | Period-filtered executive pack: dashboard, risk movement, FACTS/ANALYSIS/RECOMMENDATIONS narrative, committee actions, evidence links, PDF/HTML/Excel export. Synthetic watermark when demo data is used. |
-| **Regulatory Intelligence** | Source library, obligation explorer, cross-jurisdiction requirement comparison, applicability review, and map-to-risk suggestions. Exact quotes stay separate from machine interpretation. |
-| ~~Market context~~ | Switched off (macro data is not part of the controls workflow); code kept in `reference_views.py`. |
+| **Coverage** | Countries × risk categories matrix. |
+| **Gaps** | Baseline expectations: found / not found / not assessed. |
+| **Deadlines** | Reporting deadlines and review frequencies. |
+| **Changes** | New and amended regulations since a date. |
+| **Sources** | Document catalog and PDF reader. |
+| **Obligations** | Duty checklist (who, what, deadline, evidence, source). |
+| **Controls** | Control library with per-country obligation coverage. |
+| **Audit readiness** | Upload controls, coverage, audit pack; history. |
+| **Risk register** | Operational risk register (inherent/residual). Synthetic when demo. |
+| **RCSA** | 5×5 heat map, explicit residual approval, control gaps. |
+| **KRI Monitoring** | Indicators, appetite/tolerance, breach escalations. |
+| **Incident Management** | Incident lifecycle, loss, RCA, remediation, reporting assessment. |
+| **Operational Resilience** | IBS inventory, dependencies, BIA, scenario analysis. |
+| **Risk report** | Management risk report export (Excel/PDF). |
+| **Executive report** | Period-filtered executive pack with FACTS/ANALYSIS/RECOMMENDATIONS. |
+| **Regulatory Intelligence** | Source library, obligation explorer, applicability, map-to-risk. |
+| ~~Market context~~ | Switched off; code kept in `reference_views.py`. |
 
 Global top bar, visible on every screen:
 `[Country ▾]  [Compare with: Jordan ✕ + Add]  [Risk category ▾]  [Search clauses…]`

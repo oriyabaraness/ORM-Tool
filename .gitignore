@@ -16,6 +16,7 @@ orm.db
 # Reviews, uploaded controls and the audit log (human work; see orm/state.py)
 orm_state.db
 orm_risk.db
+data/orm_risk_demo.db
 
 # Automatic updates (./update.sh)
 update_reports/

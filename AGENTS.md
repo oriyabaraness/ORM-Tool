@@ -1,7 +1,9 @@
 # Notes for AI coding assistants
 
 - **Design:** follow `DESIGN.md`. The old Sefaria-inspired library design is
-  retired; do not reintroduce it.
+  retired; do not reintroduce it. Default landing is Overview; sidebar follows
+  the risk lifecycle. Demo Mode uses an isolated `data/orm_risk_demo.db` and a
+  guided tour — never imply Revolut affiliation or overwrite live risk data.
 - **Core feature:** Risk Compare (`orm/` package + `orm_compare.py`). Country →
   risk category → clause → equivalent clauses in other countries.
 - **Controls layer:** obligations (`orm/obligations.py`), control library
