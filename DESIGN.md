@@ -48,9 +48,11 @@ Everything below serves those three.
 ## Information architecture
 
 Navigation follows the **operational risk lifecycle**. The default landing
-screen is **Overview** (risk snapshot). The original country → category Home
-into Compare remains under **Compare** (approved exception: no library
-shelves, no hero marketing).
+screen is **Demonstration** (interview product front page mapping ORM job
+responsibilities to live modules). **Overview** remains the operational risk
+snapshot and is unchanged. The original country → category Home into Compare
+remains under **Compare** (approved exception: no library shelves, no hero
+marketing).
 
 **Demo Mode — Synthetic Data** (sidebar toggle) points `ORM_RISK_DB` at an
 isolated demo SQLite file, shows a persistent banner, and supports a five-step
@@ -61,6 +63,7 @@ Primary navigation (left rail, sectioned):
 
 | Section | Items |
 |---|---|
+| **Demonstration** | Interview front page: 11 ORM responsibilities → live modules; guided payment-disruption walkthrough. |
 | **Overview** | Operational risk snapshot, heat map, KRI trends, priority actions, regulatory changes, recent events. |
 | **Regulatory Intelligence** | Regulatory Intelligence, Regulatory Change Impact, Obligations, Sources. |
 | **Compare** | Home (country × category entry), Compare, Coverage, Gaps, Deadlines, Changes. |

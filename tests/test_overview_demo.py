@@ -95,10 +95,10 @@ def test_demo_reset_refuses_when_paths_collide(tmp_path, monkeypatch):
         demo_mode.reset(session)
 
 
-def test_tour_steps_cover_five_real_modules():
-    assert len(demo_mode.TOUR_STEPS) == 5
+def test_tour_steps_cover_payment_disruption_story():
+    assert len(demo_mode.TOUR_STEPS) == 6
     keys = [s["page_key"] for s in demo_mode.TOUR_STEPS]
-    assert keys == ["regulatory", "risks", "rcsa", "kri", "executive"]
+    assert keys == ["regulatory", "risks", "rcsa", "kri", "incidents", "executive"]
     session = {}
     demo_mode.start_tour(session)
     assert demo_mode.current_step(session)["step"] == 1

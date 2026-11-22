@@ -19,43 +19,67 @@ DEMO_BANNER = (
     "Not Revolut data. Live user risk data is not modified."
 )
 
-# Guided walkthrough — each step lands on a real module page.
+# Guided walkthrough (~5 min) — payment-disruption story; each step is a real page.
 TOUR_STEPS: list[dict[str, Any]] = [
     {
         "step": 1,
-        "title": "Select a sourced regulatory obligation",
-        "explain": "Open a Bank of Israel clause linked to the payment-disruption risk.",
+        "title": "Regulatory requirement",
+        "explain": (
+            "Start from a sourced continuity obligation underpinning the "
+            "payment-disruption risk."
+        ),
         "page_key": "regulatory",
-        "focus": "DEMO-RISK-001 obligation links (Directive 362 / continuity).",
+        "focus": "Obligation explorer · Directive / continuity citations.",
     },
     {
         "step": 2,
-        "title": "Review the linked payment risk and controls",
-        "explain": "Inspect DEMO-RISK-001 and its suggested controls, including failover testing.",
+        "title": "Operational risk identification",
+        "explain": (
+            "Open DEMO-RISK-001 — payment authorisation disruption — with "
+            "inherent and residual ratings."
+        ),
         "page_key": "risks",
-        "focus": "Risk DEMO-RISK-001 · controls CTL-DEMO-01…05.",
+        "focus": "DEMO-RISK-001 · IT / third-party dependency risk.",
+        "prefer_risk_id": "DEMO-RISK-001",
     },
     {
         "step": 3,
-        "title": "Inspect inherent and residual exposure",
-        "explain": "Open RCSA to see explicit residual assessment — not auto-calculated from controls alone.",
+        "title": "Risk and control assessment",
+        "explain": (
+            "RCSA shows residual judgement and control gaps — not auto-scored "
+            "from controls alone."
+        ),
         "page_key": "rcsa",
-        "focus": "DEMO-RISK-001 residual score and approval status.",
+        "focus": "DEMO-RISK-001 residual approval and control gaps.",
+        "prefer_risk_id": "DEMO-RISK-001",
     },
     {
         "step": 4,
-        "title": "Observe a KRI breach and related incident",
-        "explain": "Payment-failure KRI rises to Red; INC-DEMO-CLOUD shows the 100-minute disruption timeline.",
+        "title": "KRI threshold breach",
+        "explain": "Payment-failure KRI moves to Red against appetite thresholds.",
         "page_key": "kri",
-        "focus": "KRI-PAY-FAIL Red · then Incidents → INC-DEMO-CLOUD.",
-        "also_page_key": "incidents",
+        "focus": "KRI-PAY-FAIL · warning and breach thresholds.",
+        "prefer_kri_id": "KRI-PAY-FAIL",
     },
     {
         "step": 5,
-        "title": "Generate a management summary",
-        "explain": "Produce the executive pack with a remediation action for the unresolved failover finding.",
+        "title": "Operational incident",
+        "explain": (
+            "INC-DEMO-CLOUD records the disruption timeline, severity, RCA and "
+            "corrective actions."
+        ),
+        "page_key": "incidents",
+        "focus": "INC-DEMO-CLOUD · cloud disruption story.",
+        "prefer_incident_id": "INC-DEMO-CLOUD",
+    },
+    {
+        "step": 6,
+        "title": "Management reporting",
+        "explain": (
+            "Executive pack with FACTS / ANALYSIS / RECOMMENDATIONS labelled."
+        ),
         "page_key": "executive",
-        "focus": "Executive report export · committee action on failover re-test.",
+        "focus": "Executive report · committee-ready narrative.",
     },
 ]
 
