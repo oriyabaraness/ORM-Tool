@@ -177,17 +177,26 @@ def page_risks() -> None:
         if reg.empty:
             st.markdown(notice("No risks recorded yet."), unsafe_allow_html=True)
             return
-        # Optional filters from Overview (band or heat-map cell)
-        ids = st.session_state.pop("ov_filter_ids", None)
+        # Optional filters from Overview (band or explicit risk ids)
+        filter_ids = st.session_state.pop("ov_filter_ids", None)
         band = st.session_state.pop("ov_filter_band", None)
-        if ids:
-            filtered = reg[reg["id"].isin(ids)]
+        if filter_ids:
+            filtered = reg[reg["id"].isin(filter_ids)]
             if not filtered.empty:
                 reg = filtered
-                st.caption(f"Filtered from Overview · heat-map cell · {len(reg)} risk(s)")
+                st.caption(
+                    f"Filtered from Overview · selected risks · {len(reg)} risk(s)")
         elif band:
-            mapped = "Medium" if band == "Moderate" else band
-            filtered = reg[reg["residual_band"].isin([band, mapped])]
+            if band in ("High/Critical", "High", "Critical"):
+                want = ["High", "Critical"] if band == "High/Critical" else [band]
+            elif band == "Moderate":
+                want = ["Moderate", "Medium"]
+            else:
+                want = [band]
+            filtered = reg[reg["residual_band"].isin(want)]
+            # Band filters from Overview apply to assessed residuals only
+            if "residual_assessed" in filtered.columns:
+                filtered = filtered[filtered["residual_assessed"].fillna(False).astype(bool)]
             if not filtered.empty:
                 reg = filtered
                 st.caption(f"Filtered from Overview · residual band: {band}")
@@ -210,7 +219,11 @@ def page_risks() -> None:
 
         ids = reg["id"].tolist()
         labels = dict(zip(reg["id"], reg["id"] + " · " + reg["title"]))
-        risk_id = st.selectbox("Open a risk", ids, key="rk_risk", format_func=labels.get)
+        prefer = st.session_state.pop("rk_selected", None)
+        default_ix = ids.index(prefer) if prefer in ids else 0
+        risk_id = st.selectbox(
+            "Open a risk", ids, index=default_ix, key="rk_risk",
+            format_func=labels.get)
         _render_chain(conn, index, risk_id)
         _render_demo_tools(conn, index)
 
@@ -378,8 +391,9 @@ def _render_incidents(inc: pd.DataFrame, links: dict, index) -> None:
             f'{pill(i["severity"] or "", "partial")} {tol}'
             f'<div class="rk-note">{_e(i["description"])}</div>'
             '<div class="rk-kv" style="margin-top:6px">'
-            + "".join(f"<span>{_e(k)}</span><b>{_e((v or 'not recorded').replace('T', ' '))}</b>"
-                      for k, v in timeline)
+            + "".join(
+                f"<span>{_e(k)}</span><b>{_e(str(v if v is not None else 'not recorded').replace('T', ' '))}</b>"
+                for k, v in timeline)
             + f'<span>Outage</span><b>{_e(i["outage_hours"])} h against a tolerance of '
               f'{_e(i["impact_tolerance_hours"])} h</b>'
             f'<span>Detection → regulator</span><b>{_e(_fmt_minutes(i["notify_minutes"]))}</b>'

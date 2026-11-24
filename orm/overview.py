@@ -68,7 +68,18 @@ def snapshot(conn, index_conn=None, *, today: dt.date | None = None,
             pass
 
     outside = reg[reg["appetite"] == "Outside appetite"] if not reg.empty else reg
-    material = reg[reg["residual_band"].isin(["High", "Critical"])] if not reg.empty else reg
+    # Residual bands for distribution / material KPIs use assessed residuals only —
+    # suggested scores must not inflate Low / Moderate / High counts.
+    if reg.empty:
+        assessed = reg
+        unassessed = reg
+    else:
+        assessed_mask = reg["residual_assessed"].fillna(False).astype(bool)
+        assessed = reg[assessed_mask]
+        unassessed = reg[~assessed_mask]
+    material = (
+        assessed[assessed["residual_band"].isin(["High", "Critical"])]
+        if not assessed.empty else assessed)
 
     weak = ctl[ctl["rating"] != "effective"] if not ctl.empty else ctl
     if not weak.empty and "key_control" in weak.columns:
@@ -116,11 +127,12 @@ def snapshot(conn, index_conn=None, *, today: dt.date | None = None,
         high_inc = incidents[incidents["severity"].isin(["P1", "P2"])]
     overdue = acts[acts["overdue"]] if not acts.empty else acts
 
-    residual_dist = _band_counts(reg["residual_band"] if not reg.empty else pd.Series(dtype=object))
-    inherent_dist = _band_counts(reg["inherent_band"] if not reg.empty else pd.Series(dtype=object))
+    residual_dist = _band_counts(
+        assessed["residual_band"] if not assessed.empty else pd.Series(dtype=object))
+    inherent_dist = _band_counts(
+        reg["inherent_band"] if not reg.empty else pd.Series(dtype=object))
 
-    # Exposure chart frame: inherent vs residual counts by band (current only —
-    # no fabricated period history).
+    # Exposure chart frame retained for secondary use (assessed residual only).
     exposure_rows = []
     for band in ("Low", "Moderate", "High", "Critical"):
         exposure_rows.append({
@@ -129,6 +141,10 @@ def snapshot(conn, index_conn=None, *, today: dt.date | None = None,
             "Residual": residual_dist.get(band, 0),
         })
     exposure = pd.DataFrame(exposure_rows)
+
+    exposure_breakdown = _exposure_breakdown(
+        assessed=assessed, unassessed=unassessed, residual_dist=residual_dist,
+        acts=acts)
 
     # Genuine KRI history only when ≥2 observations exist
     has_kri_history = (
@@ -143,21 +159,13 @@ def snapshot(conn, index_conn=None, *, today: dt.date | None = None,
     elif has_kri_history:
         kri_note = f"Trend series: {kri_trend_label} (recorded observations)."
 
-    heat = pd.DataFrame(0, index=range(5, 0, -1), columns=range(1, 6))
-    heat_cells: dict[tuple[int, int], list[dict]] = {}
-    if not reg.empty:
-        for _, r in reg.iterrows():
-            try:
-                ri, rl = int(r["residual_impact"]), int(r["residual_likelihood"])
-            except (TypeError, ValueError):
-                continue
-            heat.loc[ri, rl] += 1
-            heat_cells.setdefault((ri, rl), []).append({
-                "id": r["id"],
-                "title": r.get("title") or r["id"],
-                "owner": r.get("owner") or "",
-                "band": r.get("residual_band") or risk.band(rl * ri),
-            })
+    assessment_comparison = _assessment_comparison(assessed)
+    control_assessment = _control_assessment(
+        assessed=assessment_comparison, ctl=ctl, conn=conn, acts=acts)
+
+    categories = []
+    if not assessed.empty and "category" in assessed.columns:
+        categories = sorted({c for c in assessed["category"].fillna("").tolist() if c})
 
     changes = pd.DataFrame()
     if index_conn is not None and queries is not None:
@@ -222,6 +230,11 @@ def snapshot(conn, index_conn=None, *, today: dt.date | None = None,
             "high_severity_incidents": 0 if high_inc.empty else len(high_inc),
             "overdue_actions": 0 if overdue.empty else len(overdue),
             "open_risks": 0 if reg.empty else len(reg),
+            "assessed_risks": 0 if assessed.empty else len(assessed),
+            "unassessed_risks": 0 if unassessed.empty else len(unassessed),
+            "high_critical_residual": exposure_breakdown["high_critical"],
+            "moderate_residual": exposure_breakdown["moderate"],
+            "low_residual": exposure_breakdown["low"],
         },
         "kpi_links": {
             "material_residual_risks": "risks",
@@ -230,7 +243,14 @@ def snapshot(conn, index_conn=None, *, today: dt.date | None = None,
             "overdue_risk_actions": "incidents",
         },
         "register": reg,
+        "assessed": assessed,
+        "unassessed": unassessed,
+        "exposure_breakdown": exposure_breakdown,
         "material": material,
+        "material_priorities": exposure_breakdown["priorities"],
+        "assessment_comparison": assessment_comparison,
+        "control_assessment": control_assessment,
+        "risk_categories": categories,
         "outside": outside,
         "weak_controls": weak,
         "kri_breaches": kri_breaches,
@@ -240,8 +260,6 @@ def snapshot(conn, index_conn=None, *, today: dt.date | None = None,
         "kri_note": kri_note,
         "high_incidents": high_inc,
         "priority_actions": overdue.head(8) if not overdue.empty else overdue,
-        "heat": heat,
-        "heat_cells": heat_cells,
         "exposure": exposure,
         "residual_distribution": residual_dist,
         "inherent_distribution": inherent_dist,
@@ -252,6 +270,178 @@ def snapshot(conn, index_conn=None, *, today: dt.date | None = None,
         "recent_activity": recent_activity,
         "empty": reg.empty and (incidents.empty if incidents is not None else True),
     }
+
+
+def _exposure_breakdown(*, assessed, unassessed, residual_dist, acts) -> dict:
+    """Assessed residual distribution + sorted material priorities for Overview."""
+    high_critical = (
+        int(residual_dist.get("Critical", 0)) + int(residual_dist.get("High", 0)))
+    moderate = int(residual_dist.get("Moderate", 0))
+    low = int(residual_dist.get("Low", 0))
+    n_unassessed = 0 if unassessed is None or unassessed.empty else len(unassessed)
+    assessed_n = high_critical + moderate + low
+
+    # Stacked bar segments — High/Critical combined for the executive view
+    segments = [
+        {"key": "high_critical", "label": "High / Critical",
+         "count": high_critical, "color": "#c45c4a"},
+        {"key": "moderate", "label": "Moderate",
+         "count": moderate, "color": "#c9a227"},
+        {"key": "low", "label": "Low",
+         "count": low, "color": "#3d8b5e"},
+    ]
+
+    priorities = _material_priorities(assessed, acts)
+
+    return {
+        "high_critical": high_critical,
+        "moderate": moderate,
+        "low": low,
+        "unassessed": n_unassessed,
+        "assessed": assessed_n,
+        "segments": segments,
+        "priorities": priorities,
+        "method_note": risk.METHOD_NOTE,
+    }
+
+
+def _top_open_action(acts: pd.DataFrame, risk_id: str) -> str:
+    if acts is None or acts.empty:
+        return "—"
+    mine = acts[(acts["source_kind"] == "risk") & (acts["source_id"] == risk_id)
+                & (acts["status"] != "done")]
+    if mine.empty:
+        return "—"
+    mine = mine.copy()
+    mine["_rank"] = mine["overdue"].map(lambda o: 0 if o else 1)
+    mine = mine.sort_values(["_rank", "due_at", "id"])
+    title = mine.iloc[0].get("title") or mine.iloc[0]["id"]
+    if mine.iloc[0].get("overdue"):
+        return f"{title} (overdue)"
+    return str(title)
+
+
+def _assessment_comparison(assessed: pd.DataFrame) -> pd.DataFrame:
+    """Inherent vs residual scores for assessed risks, highest residual first.
+
+    UI limits to 5–8 rows and applies category filters. Scores are documented
+    assessments only — never suggested residuals.
+    """
+    cols = [
+        "id", "title", "category", "owner", "inherent_score", "residual_score",
+        "inherent_band", "residual_band", "inherent_likelihood", "inherent_impact",
+        "residual_likelihood", "residual_impact", "is_synthetic", "assessed_at",
+    ]
+    if assessed is None or assessed.empty:
+        return pd.DataFrame(columns=cols)
+    df = assessed.copy()
+    df = df.sort_values(
+        ["residual_score", "inherent_score"], ascending=[False, False],
+        na_position="last")
+    keep = [c for c in cols if c in df.columns]
+    return df[keep].reset_index(drop=True)
+
+
+def _evidence_status(row) -> str:
+    rating = str(row.get("rating") or "not_tested")
+    if rating in ("not_tested", "not_assessed") or pd.isna(row.get("test_id")):
+        return "Not tested"
+    evidence = row.get("evidence_ref")
+    try:
+        has_ev = bool(evidence) and not (isinstance(evidence, float) and pd.isna(evidence))
+    except (TypeError, ValueError):
+        has_ev = bool(evidence)
+    if has_ev:
+        return "Evidence recorded"
+    return "Tested · evidence missing"
+
+
+def _format_control_rating(rating: str) -> str:
+    return {
+        "effective": "Effective",
+        "partially_effective": "Partially effective",
+        "ineffective": "Ineffective",
+        "not_tested": "Not tested",
+        "not_assessed": "Not assessed",
+    }.get(rating, rating.replace("_", " ").title() if rating else "Not assessed")
+
+
+def _control_assessment(*, assessed, ctl, conn, acts) -> pd.DataFrame:
+    """Per-risk control effectiveness summary for the comparison set."""
+    cols = ["id", "title", "control_effectiveness", "effectiveness_kind",
+            "evidence_status", "owner", "outstanding_action", "is_synthetic"]
+    if assessed is None or assessed.empty:
+        return pd.DataFrame(columns=cols)
+    links = risk._df(conn, "SELECT risk_id, control_id FROM risk_control")
+    ctl_ix = {}
+    if ctl is not None and not ctl.empty:
+        ctl_ix = ctl.set_index("id").to_dict("index")
+
+    rank = {"ineffective": 0, "partially_effective": 1, "not_tested": 2,
+            "not_assessed": 2, "effective": 3}
+    rows = []
+    for _, r in assessed.iterrows():
+        rid = r["id"]
+        linked_ids = []
+        if not links.empty:
+            linked_ids = links.loc[links["risk_id"] == rid, "control_id"].tolist()
+        linked = [ctl_ix[c] for c in linked_ids if c in ctl_ix]
+        if not linked:
+            eff, kind, evidence = "No linked controls", "na", "—"
+        else:
+            worst = min(linked, key=lambda c: rank.get(str(c.get("rating") or "not_tested"), 9))
+            rating = str(worst.get("rating") or "not_tested")
+            eff = _format_control_rating(rating)
+            if len(linked) > 1:
+                eff = f"{eff} (weakest of {len(linked)})"
+            kind = rating if rating in rank else "na"
+            # Evidence: worst-case across linked controls
+            statuses = [_evidence_status(c) for c in linked]
+            if any(s == "Not tested" for s in statuses):
+                evidence = "Not tested"
+            elif any(s == "Tested · evidence missing" for s in statuses):
+                evidence = "Tested · evidence missing"
+            else:
+                evidence = "Evidence recorded"
+        rows.append({
+            "id": rid,
+            "title": r.get("title") or rid,
+            "control_effectiveness": eff,
+            "effectiveness_kind": kind,
+            "evidence_status": evidence,
+            "owner": r.get("owner") or "—",
+            "outstanding_action": _top_open_action(acts, rid),
+            "is_synthetic": int(r.get("is_synthetic") or 0),
+        })
+    return pd.DataFrame(rows, columns=cols)
+
+
+def _material_priorities(assessed: pd.DataFrame, acts: pd.DataFrame) -> pd.DataFrame:
+    """High/Critical assessed risks, sorted for management attention."""
+    cols = ["id", "title", "residual_band", "residual_score", "owner", "appetite",
+            "top_action", "is_synthetic", "assessed_at", "overdue_actions"]
+    if assessed is None or assessed.empty:
+        return pd.DataFrame(columns=cols)
+    mat = assessed[assessed["residual_band"].isin(["High", "Critical"])].copy()
+    if mat.empty:
+        return pd.DataFrame(columns=cols)
+
+    band_rank = {"Critical": 0, "High": 1, "Moderate": 2, "Medium": 2, "Low": 3}
+    mat["_appetite_rank"] = mat["appetite"].map(
+        lambda a: 0 if a == "Outside appetite" else 1)
+    mat["_band_rank"] = mat["residual_band"].map(lambda b: band_rank.get(str(b), 9))
+    mat["_overdue_rank"] = mat["overdue_actions"].fillna(0).astype(int).map(
+        lambda n: 0 if n > 0 else 1)
+    # Most recent assessment first → invert string sort with ascending=False
+    # Sort: appetite breach → residual severity → overdue remediation → recent assessment
+    mat = mat.sort_values(
+        ["_appetite_rank", "_band_rank", "residual_score", "_overdue_rank",
+         "assessed_at"],
+        ascending=[True, True, False, True, False],
+        na_position="last")
+    mat["top_action"] = [_top_open_action(acts, rid) for rid in mat["id"]]
+    keep = [c for c in cols if c in mat.columns or c == "top_action"]
+    return mat[keep].reset_index(drop=True)
 
 
 def _attention_queue(*, outside, kri_breaches, weak, overdue, high_inc) -> pd.DataFrame:

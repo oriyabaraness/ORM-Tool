@@ -64,7 +64,7 @@ Primary navigation (left rail, sectioned):
 | Section | Items |
 |---|---|
 | **Demonstration** | Default landing (`/`). Interview front page: 11 ORM responsibilities → live modules; guided payment-disruption walkthrough. Deep link: `/?resp=R01`. |
-| **Overview** | Operational risk snapshot, heat map, KRI trends, priority actions, regulatory changes, recent events. |
+| **Overview** | Operational risk snapshot, inherent vs residual comparison, control assessment, KRI trends, priority actions, regulatory changes. |
 | **Regulatory Intelligence** | Regulatory Intelligence, Regulatory Change Impact, Obligations, Sources. |
 | **Compare** | Home (country × category entry), Compare, Coverage, Gaps, Deadlines, Changes. |
 | **Risk Register** | Risk register. |

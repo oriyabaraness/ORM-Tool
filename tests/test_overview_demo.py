@@ -34,13 +34,20 @@ def test_overview_snapshot_from_seeded_records():
         assert "overdue_risk_actions" in snap["metrics"]
         assert snap["register"] is not None
         assert not snap["exposure"].empty
-        assert isinstance(snap.get("heat_cells"), dict)
+        assert "heat_cells" not in snap  # Overview no longer carries a heat map
+        assert "assessment_comparison" in snap
+        cmp = snap["assessment_comparison"]
+        assert not cmp.empty
+        assert list(cmp["residual_score"]) == sorted(
+            cmp["residual_score"].tolist(), reverse=True)
+        assert "control_assessment" in snap
+        assert not snap["control_assessment"].empty
         assert "issue" in snap["attention"].columns or snap["attention"].empty
         assert "is a live revolut feed" in snap["notice"].lower()  # negation phrase
 
 
-def test_overview_heat_html_is_matrix_not_raw_ids(monkeypatch):
-    """Heat map must be a table of counts — not collapsed L1/I5/ID text soup."""
+def test_overview_comparison_chart_frame(monkeypatch):
+    """Overview comparison uses inherent/residual scores — never a heat matrix."""
     import sys
     monkeypatch.setitem(sys.modules, "streamlit", _fake_streamlit_full([]))
     import overview_views as ov_views
@@ -50,13 +57,26 @@ def test_overview_heat_html_is_matrix_not_raw_ids(monkeypatch):
         kri_appetite.seed(conn, force=True)
         incident_mgmt.seed(conn, None, force=True)
         snap = overview.snapshot(conn)
-    html = ov_views._residual_heat_html(snap)
-    assert '<table class="ov-heat"' in html
-    assert "L1" in html and "I5" in html
-    # Counts only in cells — RSK ids may appear in title= tooltips, not as cell body soup
-    assert ">RSK-" not in html
-    assert "background-color:" in html  # inline styles (CSS-class independent)
-    assert html.count("<td class=\"cell\"") == 25
+    frame = ov_views._comparison_chart_frame(snap["assessment_comparison"].head(8))
+    assert set(frame["measure"]) == {"Inherent", "Residual"}
+    assert (frame["score"] >= 1).all() and (frame["score"] <= 25).all()
+    assert not hasattr(ov_views, "_residual_heat_html")
+    assert not hasattr(ov_views, "_stacked_bar_html")
+
+
+def test_control_assessment_uses_documented_ratings():
+    with risk.session() as conn:
+        from orm import demo_data
+        demo_data.seed(conn, None)
+        snap = overview.snapshot(conn)
+        ctl = snap["control_assessment"]
+        assert "control_effectiveness" in ctl.columns
+        assert "evidence_status" in ctl.columns
+        # Must not invent "Effective" from residual < inherent alone
+        for _, r in ctl.iterrows():
+            assert r["control_effectiveness"]
+            assert r["evidence_status"] in (
+                "Not tested", "Evidence recorded", "Tested · evidence missing", "—")
 
 
 def test_demo_mode_isolates_and_reset_spares_live(_stores):

@@ -30,8 +30,9 @@ RESPONSIBILITIES: list[dict[str, Any]] = [
         "page_key": "overview",
         "capability": "Risk Overview · connected platform",
         "focus": (
-            "Executive metrics, residual heat map, attention queue, KRI and "
-            "regulatory strips — the connected risk data architecture."
+            "Executive metrics, inherent vs residual comparison, attention "
+            "queue, KRI and regulatory strips — the connected risk data "
+            "architecture."
         ),
         "anchor": "kpis",
     },

@@ -1,7 +1,7 @@
 """Risk Overview — operational risk intelligence landing page.
 
-Rendering must not depend on CSS from other pages. The residual heat map uses
-inline-styled HTML so Streamlit cannot collapse it into raw L1/I5 text.
+Compares documented inherent vs residual assessments. Detailed ratings and
+the residual heat map live on the Risk Register — not here.
 """
 from __future__ import annotations
 
@@ -20,21 +20,16 @@ SEVERITY_KIND = {
     "Amber": "partial", "Moderate": "partial", "Medium": "partial",
     "Low": "found",
 }
-
-# Inline colours — do not rely on theme class CSS for the matrix cells
-HEAT_BG = {
-    "Low": "#e6f2ea",
-    "Moderate": "#f7f0d8",
-    "Medium": "#f7f0d8",
-    "High": "#f3e0c8",
-    "Critical": "#f3d6d2",
+APPETITE_KIND = {
+    "Outside appetite": "gap", "Within appetite": "found", "No appetite set": "na",
 }
-HEAT_FG = {
-    "Low": "#1f6b3a",
-    "Moderate": "#7a5b00",
-    "Medium": "#7a5b00",
-    "High": "#9a4d00",
-    "Critical": "#8b2e24",
+CONTROL_KIND = {
+    "ineffective": "gap",
+    "partially_effective": "partial",
+    "not_tested": "partial",
+    "not_assessed": "na",
+    "effective": "found",
+    "na": "na",
 }
 
 CSS = """
@@ -68,23 +63,6 @@ CSS = """
   gap: 10px;}
 .ov-sec-h .meta {margin-left: auto; font-weight: 500; color: var(--ink-3);
   font-size: 12px;}
-.ov-heat-wrap {overflow-x: auto; max-width: 100%;}
-.ov-heat {width: 100%; max-width: 560px; border-collapse: separate; border-spacing: 4px;
-  table-layout: fixed; font-variant-numeric: tabular-nums;}
-.ov-heat th {font-size: 11px; font-weight: 500; color: #6b7785; text-align: center;
-  padding: 2px 0;}
-.ov-heat th.corner {width: 28px;}
-.ov-heat td.cell {height: 58px; text-align: center; vertical-align: middle;
-  border-radius: 4px; border: 1px solid transparent; font-size: 15px; font-weight: 600;}
-.ov-heat-cap {font-size: 11.5px; color: var(--ink-3); margin-top: 8px; line-height: 1.4;}
-.ov-mat {width: 100%; border-collapse: collapse; font-size: 12.5px;}
-.ov-mat th {text-align: left; font-size: 11px; font-weight: 600; color: var(--ink-3);
-  border-bottom: 1px solid var(--line); padding: 0 6px 6px;}
-.ov-mat td {padding: 7px 6px; border-bottom: 1px solid var(--line); color: var(--ink-2);
-  vertical-align: top;}
-.ov-mat .risk {color: var(--ink); font-weight: 500;}
-.ov-mat .ref {display: block; font-size: 11px; color: var(--ink-3); font-weight: 400;
-  margin-top: 1px;}
 .ov-attn {width: 100%; border-collapse: collapse; font-size: 12.5px; table-layout: fixed;}
 .ov-attn th {text-align: left; font-size: 11px; font-weight: 600; color: var(--ink-3);
   border-bottom: 1px solid var(--line); padding: 0 8px 7px;}
@@ -103,16 +81,20 @@ CSS = """
   background: var(--surface);}
 .ov-ri-item .n {font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums;}
 .ov-ri-item .l {font-size: 11.5px; color: var(--ink-3); margin-top: 3px; line-height: 1.35;}
-.ov-dist-row {display: grid; grid-template-columns: 72px 1fr 28px; gap: 8px;
-  align-items: center; font-size: 12.5px; color: var(--ink-2); margin-bottom: 7px;}
-.ov-dist-row b {color: var(--ink); font-weight: 500; text-align: right;
-  font-variant-numeric: tabular-nums;}
-.ov-bar {height: 6px; background: #eef2f6; border-radius: 999px; overflow: hidden;}
-.ov-bar > span {display: block; height: 100%; border-radius: 999px;}
-.ov-bar.critical > span {background: #c45c4a;}
-.ov-bar.high > span {background: #d4893a;}
-.ov-bar.moderate > span {background: #c9a227;}
-.ov-bar.low > span {background: #3d8b5e;}
+.ov-ctl {width: 100%; border-collapse: collapse; font-size: 12.5px; table-layout: fixed;}
+.ov-ctl th {text-align: left; font-size: 11px; font-weight: 600; color: var(--ink-3);
+  border-bottom: 1px solid var(--line); padding: 0 8px 7px;}
+.ov-ctl td {padding: 8px; border-bottom: 1px solid var(--line); color: var(--ink-2);
+  vertical-align: top;}
+.ov-ctl .risk {color: var(--ink); font-weight: 500;}
+.ov-ctl .ref {display: block; font-size: 11px; color: var(--ink-3); font-weight: 400;}
+.ov-ctl tr.hl td {background: #faf8f5;}
+.ov-ctl th:nth-child(1), .ov-ctl td:nth-child(1) {width: 28%;}
+.ov-ctl th:nth-child(2), .ov-ctl td:nth-child(2) {width: 22%;}
+.ov-ctl th:nth-child(3), .ov-ctl td:nth-child(3) {width: 18%;}
+.ov-ctl th:nth-child(4), .ov-ctl td:nth-child(4) {width: 16%;}
+.ov-ctl th:nth-child(5), .ov-ctl td:nth-child(5) {width: 16%;}
+.ov-note {font-size: 12px; color: var(--ink-3); margin: 0 0 10px; line-height: 1.45;}
 .ov-foot {font-size: 12px; color: var(--ink-3); margin-top: 10px;}
 @media (max-width: 960px) {
   .ov-kpis {grid-template-columns: repeat(2, minmax(0, 1fr));}
@@ -121,7 +103,6 @@ CSS = """
 }
 @media (max-width: 560px) {
   .ov-kpis, .ov-ri {grid-template-columns: 1fr;}
-  .ov-heat td.cell {height: 44px; font-size: 13px;}
 }
 </style>
 """
@@ -171,7 +152,7 @@ def page_overview() -> None:
                 return
 
             _kpi_strip(snap)
-            _heat_and_distribution(snap)
+            _assessment_comparison_section(snap)
             _attention_section(snap)
             _kri_and_regulatory(snap)
 
@@ -259,148 +240,227 @@ def _kpi_strip(snap: dict) -> None:
                     st.switch_page(PAGES[page])
 
 
-def _residual_heat_html(snap: dict) -> str:
-    """5×5 residual matrix with INLINE styles (Streamlit-safe). Counts only."""
-    cells = snap.get("heat_cells") or {}
-    # Empty cells keep a faint band tint so the matrix reads as a real grid
-    empty_bg = {
-        "Low": "#f3f8f4", "Moderate": "#faf7ec", "Medium": "#faf7ec",
-        "High": "#faf3ea", "Critical": "#faf0ee",
-    }
-    rows = [
-        '<div class="ov-heat-wrap" role="img" aria-label="Residual risk heat map, '
-        'likelihood across, impact up">'
-        '<table class="ov-heat"><thead><tr><th class="corner"></th>'
-    ]
-    for like in range(1, 6):
-        rows.append(f"<th>L{like}</th>")
-    rows.append("</tr></thead><tbody>")
-    for impact in range(5, 0, -1):
-        rows.append(f"<tr><th scope='row'>I{impact}</th>")
-        for like in range(1, 6):
-            entries = cells.get((impact, like), [])
-            n = len(entries)
-            band = risk.band(like * impact)
-            if band == "Medium":
-                band = "Moderate"
-            if n:
-                titles = "; ".join(
-                    f"{e['id']} {e['title']}" for e in entries[:6])
-                tip = _e(f"Likelihood {like} × Impact {impact} · {band} · {titles}")
-                bg = HEAT_BG.get(band, "#f7f9fb")
-                fg = HEAT_FG.get(band, "#6b7785")
-                body = str(n)
-                style = (f"background-color:{bg};color:{fg};"
-                         f"border:1px solid {fg}44;")
-            else:
-                tip = _e(f"Likelihood {like} × Impact {impact} · {band} · empty")
-                bg = empty_bg.get(band, "#f7f9fb")
-                body = ""
-                style = f"background-color:{bg};border:1px solid #e8edf2;"
-            rows.append(
-                f'<td class="cell" style="{style}" bgcolor="{bg}" '
-                f'title="{tip}">{body}</td>')
-        rows.append("</tr>")
-    rows.append(
-        "</tbody></table>"
-        '<div class="ov-heat-cap">Likelihood → · Impact ↑ · Cell = risk count · '
-        "Colour = residual score band (Low / Moderate / High / Critical). "
-        "Hover a cell for references.</div></div>")
-    return "".join(rows)
+def _comparison_chart_frame(rows: pd.DataFrame) -> pd.DataFrame:
+    """Long-form frame for grouped horizontal bars (inherent + residual)."""
+    out = []
+    for _, r in rows.iterrows():
+        label = str(r.get("title") or r["id"])
+        if len(label) > 42:
+            label = label[:39] + "…"
+        label = f"{r['id']}  {label}"
+        tip_base = (
+            f"{r.get('title') or r['id']} · {r.get('category') or '—'}. "
+            f"Score = likelihood × impact (1–25). "
+            f"A lower residual than inherent does not by itself prove controls "
+            f"are effective — residual is a documented assessor judgement.")
+        out.append({
+            "risk_id": r["id"],
+            "label": label,
+            "measure": "Inherent",
+            "score": int(r["inherent_score"]),
+            "band": str(r.get("inherent_band") or ""),
+            "detail": (
+                f"Inherent {int(r['inherent_score'])} "
+                f"({r.get('inherent_band')}) · "
+                f"L{int(r['inherent_likelihood'])} × I{int(r['inherent_impact'])}. "
+                f"{tip_base}"),
+        })
+        out.append({
+            "risk_id": r["id"],
+            "label": label,
+            "measure": "Residual",
+            "score": int(r["residual_score"]),
+            "band": str(r.get("residual_band") or ""),
+            "detail": (
+                f"Residual {int(r['residual_score'])} "
+                f"({r.get('residual_band')}) · "
+                f"L{int(r['residual_likelihood'])} × I{int(r['residual_impact'])}. "
+                f"{tip_base}"),
+        })
+    return pd.DataFrame(out)
 
 
-def _heat_and_distribution(snap: dict) -> None:
+def _assessment_comparison_section(snap: dict) -> None:
     st.markdown(
-        '<div class="ov-sec"><div class="ov-sec-h">Residual risk exposure'
-        '<span class="meta">5×5 matrix · counts, not raw IDs</span></div></div>',
+        '<div class="ov-sec"><div class="ov-sec-h">Risk Assessment Comparison'
+        '<span class="meta">Documented inherent vs residual · score 1–25'
+        "</span></div></div>",
         unsafe_allow_html=True)
-    left, right = st.columns([1.55, 1], gap="medium")
-    with left:
-        st.markdown("**Residual risk heat map**")
-        st.markdown(_residual_heat_html(snap), unsafe_allow_html=True)
+    st.markdown(
+        '<p class="ov-note">Bars show recorded assessments only. A reduction from '
+        "inherent to residual is an assessor judgement — it does not automatically "
+        "prove that controls are effective.</p>",
+        unsafe_allow_html=True)
 
-        cells = snap.get("heat_cells") or {}
-        occupied = sorted(
-            ((i, l, entries) for (i, l), entries in cells.items() if entries),
-            key=lambda t: (-(t[0] * t[1]), -t[0], -t[1]))
-        if occupied:
-            labels = {
-                f"I{i}×L{l} · {len(e)} risk(s) · {risk.band(i * l)}": (i, l, e)
-                for i, l, e in occupied
-            }
-            pick = st.selectbox(
-                "Open risks in cell",
-                ["—"] + list(labels),
-                key="ov_heat_cell",
-                help="Jump to Risk Register filtered to this matrix cell.")
-            if pick != "—" and st.button("Open cell in register",
-                                        key="ov_heat_go"):
-                _i, _l, entries = labels[pick]
-                st.session_state["ov_filter_ids"] = [x["id"] for x in entries]
-                st.session_state["ov_filter_band"] = None
-                if PAGES.get("risks"):
-                    st.switch_page(PAGES["risks"])
+    pool = snap.get("assessment_comparison")
+    cats = snap.get("risk_categories") or []
+    f1, f2 = st.columns([1.4, 2.6])
+    with f1:
+        cat = st.selectbox(
+            "Risk category",
+            ["All categories"] + list(cats),
+            key="ov_cmp_category")
+    with f2:
+        st.caption(
+            "Showing up to 8 material risks, sorted by highest residual score. "
+            + " · ".join(f"≤{t} {lab}" for t, lab in risk.BANDS) + ".")
 
-    with right:
-        st.markdown("**Risk distribution**")
-        dist = snap.get("residual_distribution") or {}
-        total = sum(dist.values()) or 1
-        dist_html = []
-        for band in ("Critical", "High", "Moderate", "Low"):
-            n = int(dist.get(band, 0))
-            pct = min(100, round(100 * n / total))
-            dist_html.append(
-                f'<div class="ov-dist-row"><span>{_e(band)}</span>'
-                f'<div class="ov-bar {band.lower()}"><span style="width:{pct}%">'
-                f'</span></div><b>{n}</b></div>')
-        st.markdown("".join(dist_html), unsafe_allow_html=True)
-        short_band = {"Critical": "Critical", "High": "High",
-                      "Moderate": "Moderate", "Low": "Low"}
-        bcols = st.columns(4)
-        for band, col in zip(("Critical", "High", "Moderate", "Low"), bcols):
-            n = int(dist.get(band, 0))
-            with col:
-                label = short_band[band]
-                if n and st.button(label, key=f"ov_band_{band}",
-                                   help=f"Filter register to {band} ({n})",
-                                   width="stretch"):
-                    st.session_state["ov_filter_band"] = band
-                    st.session_state.pop("ov_filter_ids", None)
-                    if PAGES.get("risks"):
-                        st.switch_page(PAGES["risks"])
+    if pool is None or pool.empty:
+        st.markdown(empty_state(
+            "No completed residual assessments to compare.",
+            "Open the Risk Register and approve inherent and residual ratings."),
+            unsafe_allow_html=True)
+        return
 
-        st.markdown("**Material residual risks**")
-        mat = snap.get("material")
-        if mat is None or mat.empty:
-            st.markdown(empty_state(
-                "No High or Critical residual risks.",
-                "Material items appear when residual band is High or Critical."),
-                unsafe_allow_html=True)
-        else:
-            body = []
-            for _, r in mat.head(6).iterrows():
-                title = str(r.get("title") or "")
-                if len(title) > 56:
-                    title = title[:53] + "…"
-                owner = r.get("owner")
-                try:
-                    if owner is None or pd.isna(owner):
-                        owner = "—"
-                except (TypeError, ValueError):
-                    owner = owner or "—"
-                sev = pill(str(r.get("residual_band") or ""),
-                           SEVERITY_KIND.get(str(r.get("residual_band")), "na"))
-                body.append(
-                    f"<tr><td class='risk'>{_e(title)}"
-                    f"<span class='ref'>{_e(r['id'])}</span></td>"
-                    f"<td>{sev}</td>"
-                    f"<td>{_e(str(owner))}</td></tr>")
-            st.markdown(
-                "<table class='ov-mat'><thead><tr>"
-                "<th>Risk / Issue</th><th>Severity</th><th>Accountable Owner</th>"
-                "</tr></thead><tbody>"
-                + "".join(body) + "</tbody></table>",
-                unsafe_allow_html=True)
+    view = pool
+    if cat != "All categories":
+        view = pool[pool["category"] == cat]
+    view = view.head(8)
+    if view.empty:
+        st.markdown(empty_state(
+            f"No assessed risks in “{cat}”.",
+            "Choose another category, or complete assessments in the Risk Register."),
+            unsafe_allow_html=True)
+        return
+
+    long = _comparison_chart_frame(view)
+    # Preserve residual-desc order on the Y axis
+    order = long.loc[long["measure"] == "Residual", "label"].tolist()
+    height = max(220, 48 * len(view) + 40)
+    base = alt.Chart(long).encode(
+        y=alt.Y("label:N", sort=order, title=None,
+                axis=alt.Axis(labelLimit=280, labelFontSize=11)),
+        x=alt.X("score:Q", title="Score (likelihood × impact)",
+                scale=alt.Scale(domain=[0, 25]),
+                axis=alt.Axis(values=[0, 5, 10, 15, 20, 25],
+                              labelFontSize=11, titleFontSize=11)),
+        xOffset="measure:N",
+    )
+    bars = base.mark_bar(cornerRadiusEnd=2).encode(
+        color=alt.Color(
+            "measure:N",
+            scale=alt.Scale(
+                domain=["Inherent", "Residual"],
+                range=["#8a94a0", "#2f5d7c"]),
+            legend=alt.Legend(title=None, orient="top", labelFontSize=12)),
+        tooltip=[
+            alt.Tooltip("risk_id:N", title="Risk"),
+            alt.Tooltip("measure:N", title="Assessment"),
+            alt.Tooltip("score:Q", title="Score"),
+            alt.Tooltip("band:N", title="Band"),
+            alt.Tooltip("detail:N", title="Detail"),
+        ],
+    )
+    labels = base.mark_text(align="left", dx=4, fontSize=11, color="#3d4650").encode(
+        text="score:Q",
+        detail="measure:N",
+    )
+    chart = (
+        (bars + labels)
+        .properties(height=height)
+        .configure_view(strokeWidth=0)
+        .configure_axis(grid=True, gridColor="#eef2f6", domainColor="#d6dde5",
+                        labelColor="#5c6670", titleColor="#5c6670")
+    )
+    st.altair_chart(chart, width="stretch")
+
+    options = {
+        f"{r['id']} · {r.get('title') or r['id']}": r["id"]
+        for _, r in view.iterrows()
+    }
+    c1, c2 = st.columns([3.2, 1])
+    with c1:
+        pick = st.selectbox(
+            "Open risk in Risk Register",
+            list(options),
+            key="ov_cmp_pick",
+            help="Opens the selected risk assessment record.")
+    with c2:
+        go = st.button("Open risk", key="ov_cmp_go", type="primary",
+                       width="stretch")
+    if go and pick:
+        st.session_state["rk_selected"] = options[pick]
+        st.session_state.pop("ov_filter_band", None)
+        st.session_state.pop("ov_filter_ids", None)
+        if PAGES.get("risks"):
+            st.switch_page(PAGES["risks"])
+
+    with st.expander("How risk is assessed"):
+        st.markdown(
+            "- **Inherent risk** — exposure before controls (likelihood × impact).\n"
+            "- **Residual risk** — exposure after controls, set by a named assessor "
+            "on the register — controls never auto-reduce the score.\n"
+            "- **Control effectiveness** — documented separately below; do not infer "
+            "effectiveness solely from a score reduction.\n\n"
+            f"*{risk.METHOD_NOTE}*")
+
+    _control_assessment_table(snap, view)
+
+
+def _control_assessment_table(snap: dict, view: pd.DataFrame) -> None:
+    st.markdown(
+        '<div class="ov-sec" style="margin-top:18px"><div class="ov-sec-h">'
+        "Control Assessment"
+        '<span class="meta">From linked control tests · not inferred from residual'
+        "</span></div></div>",
+        unsafe_allow_html=True)
+    ctl = snap.get("control_assessment")
+    if ctl is None or ctl.empty or view.empty:
+        st.markdown(empty_state(
+            "No control assessments linked to these risks.",
+            "Control ratings come from documented design and operating tests."),
+            unsafe_allow_html=True)
+        return
+    ids = list(view["id"])
+    rows = ctl[ctl["id"].isin(ids)].copy()
+    if rows.empty:
+        st.markdown(empty_state(
+            "No control assessments linked to these risks.",
+            "Control ratings come from documented design and operating tests."),
+            unsafe_allow_html=True)
+        return
+    # Keep chart order
+    rows["_ord"] = rows["id"].map({rid: i for i, rid in enumerate(ids)})
+    rows = rows.sort_values("_ord")
+
+    highlight = {"ineffective", "partially_effective", "not_tested", "not_assessed"}
+    body = []
+    for _, r in rows.iterrows():
+        title = str(r.get("title") or "")
+        if len(title) > 48:
+            title = title[:45] + "…"
+        synth = " · synthetic" if int(r.get("is_synthetic") or 0) else ""
+        kind = str(r.get("effectiveness_kind") or "na")
+        hl = " class='hl'" if kind in highlight else ""
+        eff = pill(str(r.get("control_effectiveness") or "—").split(" (")[0],
+                   CONTROL_KIND.get(kind, "na"))
+        suffix = ""
+        raw = str(r.get("control_effectiveness") or "")
+        if "(" in raw:
+            suffix = f" <span class='ref'>{_e(raw[raw.index('('):])}</span>"
+        action = str(r.get("outstanding_action") or "—")
+        if len(action) > 40:
+            action = action[:37] + "…"
+        owner = r.get("owner") or "—"
+        try:
+            if pd.isna(owner):
+                owner = "—"
+        except (TypeError, ValueError):
+            pass
+        body.append(
+            f"<tr{hl}><td class='risk'>{_e(title)}"
+            f"<span class='ref'>{_e(r['id'])}{_e(synth)}</span></td>"
+            f"<td>{eff}{suffix}</td>"
+            f"<td>{_e(str(r.get('evidence_status') or '—'))}</td>"
+            f"<td>{_e(str(owner))}</td>"
+            f"<td>{_e(action)}</td></tr>")
+    st.markdown(
+        "<table class='ov-ctl' role='table'><thead><tr>"
+        "<th>Risk</th><th>Control effectiveness</th><th>Evidence status</th>"
+        "<th>Risk owner</th><th>Outstanding action</th>"
+        "</tr></thead><tbody>"
+        + "".join(body) + "</tbody></table>",
+        unsafe_allow_html=True)
 
 
 def _attention_section(snap: dict) -> None:
